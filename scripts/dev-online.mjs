@@ -106,7 +106,7 @@ try {
   await startBackend();
   console.log("… Creating a free HTTPS/WSS tunnel.");
   const { url: tunnelUrl } = await startTunnel();
-  const shareUrl = `${siteUrl}?server=${encodeURIComponent(tunnelUrl)}`;
+  const shareUrl = `${siteUrl}play/?server=${encodeURIComponent(tunnelUrl)}`;
   try {
     await waitForTunnelHealth(tunnelUrl, 8_000);
   } catch (error) {

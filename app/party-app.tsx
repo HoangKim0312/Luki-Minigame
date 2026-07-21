@@ -128,4 +128,4 @@ function RoomView({code}:{code:string}){const router=useRouter();const {locale,t
     <button className="leave-link" onClick={()=>router.push("/")}>← {t("leaveRoom")}</button>
   </main>}
 
-export function PartyApp({view}:{view:View}){const [code,setCode]=useState("");useEffect(()=>{queueMicrotask(()=>setCode(new URLSearchParams(location.search).get("code")?.toUpperCase()||""))},[]);return <><Header/>{view==="home"&&<HomeView/>}{view==="play"&&<PlayView/>}{view==="create"&&<CreateView/>}{view==="games"&&<GamesView/>}{view==="login"&&<LoginView/>}{view==="admin"&&<AdminView/>}{view==="room"&&code&&<RoomView code={code}/>}</>}
+export function PartyApp({view}:{view:View}){const [code,setCode]=useState("");useEffect(()=>{getBackendUrl();queueMicrotask(()=>setCode(new URLSearchParams(location.search).get("code")?.toUpperCase()||""))},[]);return <><Header/>{view==="home"&&<HomeView/>}{view==="play"&&<PlayView/>}{view==="create"&&<CreateView/>}{view==="games"&&<GamesView/>}{view==="login"&&<LoginView/>}{view==="admin"&&<AdminView/>}{view==="room"&&code&&<RoomView code={code}/>}</>}

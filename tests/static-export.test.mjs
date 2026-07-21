@@ -26,3 +26,11 @@ test("uses the repository base path and Vietnamese-first content", async () => {
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape/i);
   assert.match(html, /AI/);
 });
+
+test("persists a shared backend URL before client-side navigation", async () => {
+  const source = await readFile(new URL("../app/party-app.tsx", import.meta.url), "utf8");
+  assert.match(source, /function PartyApp[\s\S]*?useEffect\(\(\)=>\{getBackendUrl\(\);/);
+
+  const launcher = await readFile(new URL("../scripts/dev-online.mjs", import.meta.url), "utf8");
+  assert.match(launcher, /siteUrl\}play\/\?server=/);
+});
