@@ -50,7 +50,14 @@ test("server protects secrets and runs realtime game transitions", async (contex
   const code = created.data.room.code;
   const joined = await emit(guest, "room:join", { code, name: "Guest" });
   assert.equal(joined.ok, true);
+  const readyStatePromise = waitFor(guest, "server:room-state", state => state.players.some(player => player.name === "Host" && player.ready));
   await emit(host, "room:ready", { ready: true });
+  const readyState = await readyStatePromise;
+  assert.equal(readyState.players.find(player => player.name === "Host").ready, true);
+  const lobbyChatPromise = waitFor(guest, "server:room-state", state => state.chatMessages.some(message => message.text === "Ready to play! 😀"));
+  await emit(host, "room:chat", { message: "Ready to play! 😀" });
+  const lobbyChatState = await lobbyChatPromise;
+  assert.equal(lobbyChatState.chatMessages.at(-1).senderName, "Host");
   await emit(guest, "room:ready", { ready: true });
   await emit(host, "room:start", {});
 
@@ -86,7 +93,7 @@ test("server protects secrets and runs realtime game transitions", async (contex
   assert.equal(numberPublic.rounds, 0);
 
   const chatStatePromise = waitFor(numberGuest, "server:room-state", state => state.chatMessages.some(message => message.text === "Số này có lớn hơn 50 không? 🎯"));
-  await emit(numberHost, "game:number-chat", { message: "Số này có lớn hơn 50 không? 🎯" });
+  await emit(numberHost, "room:chat", { message: "Số này có lớn hơn 50 không? 🎯" });
   const chatState = await chatStatePromise;
   assert.equal(chatState.chatMessages.at(-1).senderName, "Nora");
 

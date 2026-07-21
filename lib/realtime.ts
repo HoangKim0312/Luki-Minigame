@@ -77,7 +77,7 @@ export interface ClientToServerEvents {
   "game:reveal": (input: Record<string, never>, ack: (result: SocketAck) => void) => void;
   "game:next": (input: Record<string, never>, ack: (result: SocketAck) => void) => void;
   "game:number-guess": (input: { targetId: string; guess: number }, ack: (result: SocketAck<{ correct: boolean }>) => void) => void;
-  "game:number-chat": (input: { message: string }, ack: (result: SocketAck) => void) => void;
+  "room:chat": (input: { message: string }, ack: (result: SocketAck) => void) => void;
   "game:number-reveal": (input: Record<string, never>, ack: (result: SocketAck) => void) => void;
   "game:number-next": (input: Record<string, never>, ack: (result: SocketAck) => void) => void;
   "game:convergence-submit": (input: { answer: string }, ack: (result: SocketAck) => void) => void;
