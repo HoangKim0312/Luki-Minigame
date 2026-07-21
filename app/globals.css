@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
 :root {
+  --font-body: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Arial Narrow", "Segoe UI", Arial, sans-serif;
   --ink: #f4f2e9;
   --muted: #aaa9b1;
   --paper: #0b0b13;
@@ -13,7 +15,7 @@
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; background: var(--paper); }
-body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--font-body), sans-serif; min-width: 320px; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--font-body); min-width: 320px; }
 button, input, select { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 a { color: inherit; text-decoration: none; }

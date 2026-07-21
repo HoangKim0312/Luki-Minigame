@@ -258,7 +258,7 @@ function PlayView() {
     if (clean.length < 4 || clean.length > 6) { setError(t("invalidCode")); return; }
     window.localStorage.setItem("luki-name", name.trim().slice(0, 24));
     ensureGuestId();
-    router.push(`/room/${clean}`);
+    router.push(`/room?code=${clean}`);
   }
 
   return (
@@ -300,7 +300,7 @@ function CreateView() {
     };
     window.localStorage.setItem("luki-name", name.trim().slice(0, 24));
     saveRoom(room);
-    router.push(`/room/${code}`);
+    router.push(`/room?code=${code}`);
   }
 
   return (
@@ -457,7 +457,7 @@ function RoomView({ code }: { code: string }) {
   }
 
   async function copyCode() {
-    await navigator.clipboard.writeText(`${window.location.origin}/room/${code}`);
+    await navigator.clipboard.writeText(window.location.href);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);
   }
@@ -544,7 +544,18 @@ function Results({ room, isHost, onRestart }: { room: RoomRecord; isHost: boolea
   return <div className="results-stage"><span className="trophy">✦</span><p className="stage-kicker">{t("winner")}</p><h1>{winner?.name}</h1><strong>{winner?.score ?? 0} pts</strong><div className="podium">{[...room.players].sort((a, b) => b.score - a.score).map((player, index) => <div key={player.id}><span>{index + 1}</span><p>{player.name}</p><b>{player.score}</b></div>)}</div>{isHost && <button className="button" onClick={onRestart}>{t("playAgain")} <span>↻</span></button>}</div>;
 }
 
-export function PartyApp({ view, roomCode }: { view: View; roomCode?: string }) {
+function RoomEntry() {
+  const [code, setCode] = useState("");
+
+  useEffect(() => {
+    const requestedCode = new URLSearchParams(window.location.search).get("code")?.toUpperCase().replace(/[^A-Z0-9]/g, "") ?? "";
+    queueMicrotask(() => setCode(requestedCode));
+  }, []);
+
+  return code ? <RoomView code={code} /> : <main className="room-loading">Luki…</main>;
+}
+
+export function PartyApp({ view }: { view: View }) {
   return (
     <div className="app-shell">
       <Header />
@@ -552,7 +563,7 @@ export function PartyApp({ view, roomCode }: { view: View; roomCode?: string }) 
       {view === "play" && <PlayView />}
       {view === "create" && <CreateView />}
       {view === "games" && <GamesView />}
-      {view === "room" && roomCode && <RoomView code={roomCode} />}
+      {view === "room" && <RoomEntry />}
     </div>
   );
 }
