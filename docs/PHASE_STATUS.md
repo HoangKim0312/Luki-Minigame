@@ -39,7 +39,7 @@ Kết luận: project vẫn thuộc **Phase 1**, chưa nên đánh dấu Phase 1
 1. Thêm PostgreSQL, Prisma schema/migrations và Redis.
 2. Tách state machine/game engine khỏi transport Socket.IO.
 3. Thêm timer server-authoritative và event log/idempotency key.
-4. Hoàn thiện luật riêng cho Think Around the Number, Same Wavelength và Who Said It.
+4. Hoàn thiện state machine riêng cho Same Wavelength và Who Said It; Think Around the Number đã có luồng số bí mật, đoán, reveal và phát số mới không giới hạn.
 5. Sau đó mới chuyển sang WebRTC voice ở Phase 6.
 
 ## Rủi ro hiện còn

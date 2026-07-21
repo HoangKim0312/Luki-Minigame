@@ -7,6 +7,7 @@ Website: <https://hoangkim0312.github.io/Luki-Minigame/>
 ## Có gì trong MVP
 
 - 4 game có thể tạo phòng: **Chung Tần Số**, **Ai Đã Nói?**, **Nghĩ Quanh Con Số** và **Ý Kiến Nóng**.
+- **Nghĩ Quanh Con Số** phát riêng cho mỗi người một số 0–99, không dùng AI và không giới hạn vòng; người chơi tự hỏi nhau, đoán, lật số đúng rồi phát bộ số mới.
 - Người chơi ngồi quanh cùng một board; trạng thái đã trả lời được hiển thị nhưng đáp án vẫn úp cho tới lúc host lật bài.
 - Khách vào phòng bằng tên + mã, không cần tài khoản.
 - Người chơi có thể đăng ký để lưu danh tính; admin đăng nhập bằng tài khoản do backend tạo.

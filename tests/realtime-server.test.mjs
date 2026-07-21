@@ -16,6 +16,15 @@ function once(socket, event) {
   return new Promise((resolve) => socket.once(event, resolve));
 }
 
+function waitFor(socket, event, predicate) {
+  return new Promise((resolve) => {
+    const handler = (value) => {
+      if (predicate(value)) { socket.off(event, handler); resolve(value); }
+    };
+    socket.on(event, handler);
+  });
+}
+
 test("server keeps answers private until the host reveals them", async (context) => {
   const server = spawn(process.execPath, ["node_modules/tsx/dist/cli.mjs", "server/index.ts"], {
     cwd: new URL("..", import.meta.url),
@@ -46,7 +55,7 @@ test("server keeps answers private until the host reveals them", async (context)
   await emit(host, "room:start", {});
 
   await emit(host, "game:submit-answer", { answer: "Phở" });
-  const hiddenStatePromise = once(guest, "server:room-state");
+  const hiddenStatePromise = waitFor(guest, "server:room-state", state => state.answeredPlayerIds.length === 2);
   await emit(guest, "game:submit-answer", { answer: "Phở" });
   const hiddenState = await hiddenStatePromise;
   assert.equal(hiddenState.revealedAnswers, undefined);
@@ -57,4 +66,38 @@ test("server keeps answers private until the host reveals them", async (context)
   const revealed = await revealPromise;
   assert.deepEqual(Object.values(revealed.revealedAnswers).sort(), ["Phở", "Phở"]);
   assert.equal(revealed.players.every((player) => player.score === 100), true);
+
+  const numberHost = io(url, { transports: ["websocket"] });
+  const numberGuest = io(url, { transports: ["websocket"] });
+  context.after(() => { numberHost.disconnect(); numberGuest.disconnect(); });
+  await Promise.all([once(numberHost, "connect"), once(numberGuest, "connect")]);
+  const numberCreated = await emit(numberHost, "room:create", { name: "Nora", gameId: "number", language: "vi", rounds: 3 });
+  const numberCode = numberCreated.data.room.code;
+  await emit(numberGuest, "room:join", { code: numberCode, name: "Gus" });
+  await emit(numberHost, "room:ready", { ready: true });
+  await emit(numberGuest, "room:ready", { ready: true });
+  const hostPrivatePromise = waitFor(numberHost, "server:private-state", state => Number.isInteger(state.secretNumber));
+  const guestPrivatePromise = waitFor(numberGuest, "server:private-state", state => Number.isInteger(state.secretNumber));
+  const numberPublicPromise = waitFor(numberGuest, "server:room-state", state => state.gameId === "number" && state.phase === "answering");
+  await emit(numberHost, "room:start", {});
+  const [hostPrivate, , numberPublic] = await Promise.all([hostPrivatePromise, guestPrivatePromise, numberPublicPromise]);
+  assert.equal(numberPublic.numberRound.number, undefined);
+  assert.equal(numberPublic.revealedAnswers, undefined);
+  assert.equal(numberPublic.rounds, 0);
+
+  const correctStatePromise = waitFor(numberGuest, "server:room-state", state => state.numberRound?.status === "correct");
+  const guessResult = await emit(numberGuest, "game:number-guess", { targetId: hostPrivate.playerId, guess: hostPrivate.secretNumber });
+  assert.equal(guessResult.data.correct, true);
+  const correctState = await correctStatePromise;
+  assert.equal("number" in correctState.numberRound, false);
+
+  const revealedNumberPromise = waitFor(numberGuest, "server:room-state", state => state.numberRound?.status === "revealed");
+  await emit(numberHost, "game:number-reveal", {});
+  const numberRevealed = await revealedNumberPromise;
+  assert.equal(numberRevealed.numberRound.number, hostPrivate.secretNumber);
+
+  const nextPrivatePromise = waitFor(numberGuest, "server:private-state", state => Number.isInteger(state.secretNumber));
+  await emit(numberHost, "game:number-next", {});
+  const nextPrivate = await nextPrivatePromise;
+  assert.equal(Number.isInteger(nextPrivate.secretNumber), true);
 });

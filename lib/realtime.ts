@@ -23,6 +23,10 @@ export type PublicRoomState = {
   answeredPlayerIds: string[];
   revealedAnswers?: Record<string, string>;
   question: string;
+  numberRound?:
+    | { status: "playing" }
+    | { status: "correct"; targetId: string; targetName: string; guesserName: string }
+    | { status: "revealed"; targetId: string; targetName: string; guesserName: string; number: number };
   revision: number;
   createdAt: number;
   expiresAt: number;
@@ -32,6 +36,7 @@ export type PrivateRoomState = {
   playerId: string;
   answer?: string;
   resumeToken: string;
+  secretNumber?: number;
 };
 
 export type SocketAck<T = undefined> =
@@ -54,4 +59,7 @@ export interface ClientToServerEvents {
   "game:submit-answer": (input: { answer: string }, ack: (result: SocketAck) => void) => void;
   "game:reveal": (input: Record<string, never>, ack: (result: SocketAck) => void) => void;
   "game:next": (input: Record<string, never>, ack: (result: SocketAck) => void) => void;
+  "game:number-guess": (input: { targetId: string; guess: number }, ack: (result: SocketAck<{ correct: boolean }>) => void) => void;
+  "game:number-reveal": (input: Record<string, never>, ack: (result: SocketAck) => void) => void;
+  "game:number-next": (input: Record<string, never>, ack: (result: SocketAck) => void) => void;
 }

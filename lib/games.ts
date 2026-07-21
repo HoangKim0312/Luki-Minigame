@@ -38,13 +38,10 @@ export const defaultGames: GameDefinition[] = [
     },
   },
   {
-    id: "number", icon: "37", kind: "number", minPlayers: 2, maxPlayers: 8, minutes: "12–20", tone: "violet", published: true, aiEnabled: true, topic: "Ước lượng vui từ 1 đến 100",
+    id: "number", icon: "37", kind: "number", minPlayers: 2, maxPlayers: 8, minutes: "∞", tone: "violet", published: true, aiEnabled: false, topic: "",
     name: { vi: "Nghĩ Quanh Con Số", en: "Think Around the Number" },
-    description: { vi: "Cùng đưa ra một con số từ 1–100 cho tình huống và xem cả bàn gần nhau đến đâu.", en: "Pick a number from 1–100 for a situation and see how close the table gets." },
-    questions: {
-      vi: ["Mức độ đáng sợ khi điện thoại còn 2% pin, từ 1–100?", "Một buổi hẹn hoàn hảo cần bao nhiêu điểm trên 100?", "Khả năng bạn ngủ tiếp sau khi tắt báo thức, từ 1–100?"],
-      en: ["How scary is a phone at 2% battery, from 1–100?", "How perfect should a great date be, out of 100?", "How likely are you to sleep after dismissing an alarm, from 1–100?"],
-    },
+    description: { vi: "Mỗi người nhận một số bí mật từ 0–99. Hỏi lẫn nhau, đoán số của bạn bè và chơi không giới hạn lượt.", en: "Everyone gets a secret number from 0–99. Ask each other questions, guess friends’ numbers, and play without a round limit." },
+    questions: { vi: [], en: [] },
   },
   {
     id: "hot-take", icon: "✦", kind: "prompt", minPlayers: 2, maxPlayers: 12, minutes: "10–20", tone: "sky", published: true, aiEnabled: true, topic: "Quan điểm vui, không gây tranh cãi nặng",
