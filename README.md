@@ -1,8 +1,19 @@
 # Luki Party Games
 
-Luki là nền tảng minigame nhóm với giao diện song ngữ Việt–Anh. Bản MVP hiện tại tập trung vào luồng tạo phòng, tham gia bằng mã và game **Chung Tần Số** có thể chơi hoàn chỉnh trong chế độ phòng cục bộ.
+Luki là nền tảng minigame nhóm song ngữ Việt–Anh, có giao diện bàn chơi chung, thẻ đáp án úp/lật, tài khoản người chơi tùy chọn và một backend local dành cho admin + AI.
 
-## Chạy tại máy
+Website: <https://hoangkim0312.github.io/Luki-Minigame/>
+
+## Có gì trong MVP
+
+- 4 game có thể tạo phòng: **Chung Tần Số**, **Ai Đã Nói?**, **Nghĩ Quanh Con Số** và **Ý Kiến Nóng**.
+- Người chơi ngồi quanh cùng một board; trạng thái đã trả lời được hiển thị nhưng đáp án vẫn úp cho tới lúc host lật bài.
+- Khách vào phòng bằng tên + mã, không cần tài khoản.
+- Người chơi có thể đăng ký để lưu danh tính; admin đăng nhập bằng tài khoản do backend tạo.
+- Admin thêm/chỉnh game, bật/tắt xuất bản, sửa bộ câu hỏi VI/EN và tạo câu hỏi AI theo chủ đề.
+- Khi chưa có OpenAI API key, backend dùng bộ câu hỏi dự phòng để luồng quản trị vẫn hoạt động.
+
+## Chạy frontend
 
 Yêu cầu Node.js `>=22.13.0`.
 
@@ -11,80 +22,47 @@ npm install
 npm run dev
 ```
 
-Mở địa chỉ được in trong terminal (mặc định `http://localhost:3000`).
+Frontend mặc định ở `http://localhost:3000`.
 
-## Kiểm tra
+## Chạy backend local
+
+Sao chép `.env.example` thành `.env.local`, sau đó thay ít nhất:
+
+```dotenv
+SESSION_SECRET=mot-chuoi-ngau-nhien-dai
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=mat-khau-manh
+OPENAI_API_KEY=
+```
+
+Không commit `.env.local` và không đưa API key vào biến `NEXT_PUBLIC_*`.
 
 ```bash
-npm run build
+npm run dev:server
+```
+
+Backend chạy ở `http://localhost:8787`. Lần chạy đầu sẽ tạo tài khoản admin và dữ liệu trong `.local-data/` (đã được gitignore). Model có thể đổi qua `OPENAI_MODEL`; mặc định là `gpt-5.6-sol`.
+
+## Dùng backend local với GitHub Pages
+
+Trang GitHub Pages chạy HTTPS nên trình duyệt không thể gọi thẳng backend HTTP ở máy bạn. Cần:
+
+1. Mở một HTTPS tunnel trỏ tới `http://localhost:8787` (Cloudflare Tunnel, ngrok hoặc dịch vụ tương đương).
+2. Đặt `ALLOWED_ORIGINS=https://hoangkim0312.github.io` trong `.env.local`.
+3. Trong GitHub repo, vào **Settings → Secrets and variables → Actions → Variables**, tạo `NEXT_PUBLIC_API_URL` với URL HTTPS của tunnel.
+4. Chạy lại workflow **Deploy GitHub Pages**.
+
+Nếu backend/tunnel tắt, website công khai vẫn tải và khách vẫn chơi bản local demo; đăng nhập, quản trị và AI sẽ tạm không dùng được.
+
+## Kiểm tra và deploy
+
+```bash
 npm run lint
 npm test
 ```
 
-## Tính năng đang hoạt động
+Mỗi push lên `main` sẽ chạy `.github/workflows/deploy-pages.yml` và deploy thư mục static export. Vercel cũng có thể import trực tiếp repository; hãy đặt `NEXT_PUBLIC_API_URL` trong Project Environment Variables nếu dùng Vercel.
 
-- Trang chủ, kho game, tạo phòng, tham gia phòng và sảnh chờ responsive.
-- Tiếng Việt là ngôn ngữ mặc định; có nút đổi VI/EN toàn cục và lưu lựa chọn trên thiết bị.
-- Tách riêng ngôn ngữ giao diện và ngôn ngữ câu hỏi khi tạo phòng.
-- Bộ câu hỏi mẫu bằng Tiếng Việt và English.
-- Đồng bộ phòng giữa nhiều tab cùng trình duyệt bằng `localStorage` và `storage` events.
-- Mã mời, trạng thái sẵn sàng, vai trò chủ phòng và người chơi thử cục bộ.
-- Một vòng chơi Chung Tần Số: gửi đáp án riêng, chuẩn hoá đáp án, ghép câu trả lời trùng, tính điểm, chuyển vòng và kết quả.
-- Social card riêng tại `public/og.png` với metadata Open Graph/X theo host hiện tại.
+## Lưu ý kiến trúc
 
-## Cấu trúc chính
-
-```text
-app/
-  i18n-provider.tsx   Bộ từ điển VI/EN và locale context
-  party-app.tsx       Luồng giao diện, phòng cục bộ và game mẫu
-  page.tsx            Trang chủ
-  create/             Tạo phòng
-  play/               Tham gia bằng mã
-  games/              Kho trò chơi
-  room/               Sảnh và game đang chơi (`?code=ABC123`)
-tests/
-  rendered-html.test.mjs
-```
-
-## Thêm bản dịch
-
-1. Thêm cùng một key vào cả `messages.vi` và `messages.en` trong `app/i18n-provider.tsx`.
-2. Dùng `t("key")` trong component thay vì viết chuỗi trực tiếp.
-3. Với chuỗi động, dùng biến dạng `t("roundOf", { round, total })`.
-4. Thêm câu hỏi game vào `questions.vi` và `questions.en` trong `app/party-app.tsx`.
-
-TypeScript bắt buộc mọi key của `t()` phải tồn tại trong từ điển Tiếng Việt. Build và test render sẽ kiểm tra trang vẫn dùng `lang="vi"` và không còn nội dung starter.
-
-## Giới hạn hiện tại
-
-Phòng hiện chỉ là bản chơi cục bộ để xác nhận UX và i18n; chưa có Socket.IO, PostgreSQL/Redis, WebRTC hay bảo mật server-authoritative. Không dùng kiến trúc hiện tại để vận hành phòng công khai trên Internet. Bước production tiếp theo là chuyển `RoomRecord` và toàn bộ action/tính điểm sang server thời gian thực, sau đó giữ nguyên lớp i18n phía client.
-
-## Deploy miễn phí bằng GitHub Pages
-
-Project đã có workflow [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml). Mỗi lần push lên nhánh `main`, GitHub Actions sẽ tạo static export và deploy lên:
-
-```text
-https://hoangkim0312.github.io/Luki-Minigame/
-```
-
-Thiết lập một lần trên GitHub:
-
-1. Mở **Settings → Pages** của repository.
-2. Trong **Build and deployment → Source**, chọn **GitHub Actions**.
-3. Mở tab **Actions** để theo dõi workflow `Deploy GitHub Pages`.
-
-Kiểm tra chính xác bản static trước khi push:
-
-```bash
-npm run build:pages
-npm test
-```
-
-## Deploy bằng Vercel
-
-Import repository `HoangKim0312/Luki-Minigame` trong Vercel và giữ nguyên framework **Next.js**. Vercel sẽ dùng `npm run build`; không cần đổi output directory hay đặt `GITHUB_PAGES=true`.
-
-## Backend chạy tại máy cá nhân
-
-Website GitHub Pages chạy qua HTTPS nên backend trên máy cá nhân cần một URL HTTPS công khai hoặc tunnel, cùng cấu hình CORS/WebSocket chỉ cho domain frontend. Không đưa secret/API key vào biến `NEXT_PUBLIC_*` hoặc commit chúng vào repository. Backend production vẫn phải tự xác thực người chơi và giữ quyền quyết định điểm số/trạng thái phòng.
+Phòng hiện đồng bộ giữa các tab cùng trình duyệt bằng `localStorage`, phù hợp để demo UI/luật chơi. Để nhiều thiết bị chơi qua Internet thật sự, bước tiếp theo là chuyển room state, WebSocket và tính điểm sang backend server-authoritative. Backend auth hiện dùng token HMAC, mật khẩu băm bằng `scrypt`, và chỉ endpoint admin mới được phép thay đổi game/tạo câu hỏi AI.

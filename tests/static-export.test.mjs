@@ -11,6 +11,8 @@ test("exports every GitHub Pages route", async () => {
     access(new URL("games/index.html", exported)),
     access(new URL("play/index.html", exported)),
     access(new URL("room/index.html", exported)),
+    access(new URL("login/index.html", exported)),
+    access(new URL("admin/index.html", exported)),
     access(new URL(".nojekyll", exported)),
   ]);
 });
@@ -22,4 +24,5 @@ test("uses the repository base path and Vietnamese-first content", async () => {
   assert.match(html, /Nhiều chuyện để nói\./);
   assert.match(html, /\/Luki-Minigame\/_next\//);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape/i);
+  assert.match(html, /AI/);
 });
