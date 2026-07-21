@@ -2,13 +2,17 @@
 
 import { io, Socket } from "socket.io-client";
 import type { ClientToServerEvents, ServerToClientEvents, SocketAck } from "./realtime";
+import { getBackendUrl } from "./backend-url";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8787";
 let socket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null;
+let socketUrl = "";
 
 export function getSocket() {
-  if (!socket) {
-    socket = io(API_URL, {
+  const backendUrl = getBackendUrl();
+  if (!socket || socketUrl !== backendUrl) {
+    socket?.disconnect();
+    socketUrl = backendUrl;
+    socket = io(backendUrl, {
       autoConnect: false,
       transports: ["websocket", "polling"],
       reconnection: true,

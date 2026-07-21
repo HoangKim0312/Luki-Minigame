@@ -48,6 +48,18 @@ Backend REST + Socket.IO chạy ở `http://localhost:8787`. Lần chạy đầu
 
 ## Dùng backend local với GitHub Pages
 
+Cách nhanh nhất — chạy một lệnh:
+
+```bash
+npm run dev:online
+```
+
+Lệnh này tự khởi động backend, tạo Cloudflare Quick Tunnel hỗ trợ HTTPS/WSS, kiểm tra kết nối và in ra một **Share this link**. Gửi nguyên link đó cho người chơi. Tham số `?server=...` được frontend lưu trên thiết bị, vì vậy không cần sửa GitHub variable hoặc deploy lại mỗi lần tunnel đổi URL. Giữ terminal mở trong lúc chơi; nhấn `Ctrl+C` để tắt backend và tunnel.
+
+Máy cần có `cloudflared` trong `PATH`. Có thể chỉ định đường dẫn riêng qua biến `CLOUDFLARED_PATH`.
+
+### Tunnel cố định
+
 Trang GitHub Pages chạy HTTPS nên trình duyệt không thể gọi thẳng backend HTTP ở máy bạn. Cần:
 
 1. Mở một HTTPS tunnel trỏ tới `http://localhost:8787` (Cloudflare Tunnel, ngrok hoặc dịch vụ tương đương).

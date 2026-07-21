@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { defaultGames, GameDefinition, readLocalGames, writeLocalGames } from "../lib/games";
+import { getBackendUrl } from "../lib/backend-url";
 import type { PrivateRoomState, PublicRoomState } from "../lib/realtime";
 import { connectSocket, emitWithAck, getSocket } from "../lib/socket";
 import { Locale, useI18n } from "./i18n-provider";
@@ -11,13 +12,12 @@ import { Locale, useI18n } from "./i18n-provider";
 type View = "home" | "play" | "create" | "games" | "room" | "login" | "admin";
 type Session = { token: string; user: { name: string; email: string; role: "admin" | "player" } };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8787";
 const text = (locale: Locale, vi: string, en: string) => locale === "vi" ? vi : en;
 function getSession(): Session | null { try { const raw = window.localStorage.getItem("luki-session"); return raw ? JSON.parse(raw) as Session : null; } catch { return null; } }
 
 async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const session = getSession();
-  const response = await fetch(`${API_URL}${path}`, { ...options, headers: { "Content-Type": "application/json", ...(session ? { Authorization: `Bearer ${session.token}` } : {}), ...options.headers } });
+  const response = await fetch(`${getBackendUrl()}${path}`, { ...options, headers: { "Content-Type": "application/json", ...(session ? { Authorization: `Bearer ${session.token}` } : {}), ...options.headers } });
   const data = await response.json() as T & { error?: string };
   if (!response.ok) throw new Error(data.error || "API error");
   return data;
