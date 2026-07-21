@@ -30,9 +30,10 @@ export type PublicRoomState = {
   convergence?: {
     step: number;
     words: Record<string, string>;
-    status: "thinking" | "different" | "matched";
+    status: "thinking" | "countdown" | "different" | "matched";
     answers?: Record<string, string>;
     match?: string;
+    revealAt?: number;
   };
   revision: number;
   createdAt: number;

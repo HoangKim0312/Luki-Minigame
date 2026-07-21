@@ -120,8 +120,15 @@ test("server protects secrets and runs realtime game transitions", async (contex
   assert.equal(new Set(Object.values(convergenceStarted.convergence.words)).size, 2);
 
   await emit(convergenceHost, "game:convergence-submit", { answer: "Mưa" });
+  const differentCountdownPromise = waitFor(convergenceGuest, "server:room-state", state => state.convergence?.status === "countdown");
   const differentPromise = waitFor(convergenceGuest, "server:room-state", state => state.convergence?.status === "different");
   await emit(convergenceGuest, "game:convergence-submit", { answer: "Nắng" });
+  const differentCountdown = await differentCountdownPromise;
+  assert.equal(differentCountdown.phase, "answering");
+  assert.equal(differentCountdown.revealedAnswers, undefined);
+  assert.equal(differentCountdown.convergence.answers, undefined);
+  assert.equal(differentCountdown.answeredPlayerIds.length, 2);
+  assert.equal(differentCountdown.convergence.revealAt > Date.now(), true);
   const different = await differentPromise;
   assert.deepEqual(Object.values(different.convergence.answers), ["Mưa", "Nắng"]);
   const continuedPromise = waitFor(convergenceGuest, "server:room-state", state => state.convergence?.status === "thinking" && state.convergence.step === 2);
@@ -131,8 +138,12 @@ test("server protects secrets and runs realtime game transitions", async (contex
   assert.equal(continued.revealedAnswers, undefined);
 
   await emit(convergenceHost, "game:convergence-submit", { answer: "Cà Phê!" });
+  const matchedCountdownPromise = waitFor(convergenceGuest, "server:room-state", state => state.convergence?.status === "countdown");
   const matchedPromise = waitFor(convergenceGuest, "server:room-state", state => state.convergence?.status === "matched");
   await emit(convergenceGuest, "game:convergence-submit", { answer: "  ca   phe  " });
+  const matchedCountdown = await matchedCountdownPromise;
+  assert.equal(matchedCountdown.revealedAnswers, undefined);
+  assert.equal(matchedCountdown.convergence.answers, undefined);
   const matched = await matchedPromise;
   assert.equal(matched.convergence.match, "Cà Phê!");
   assert.equal(matched.players.every((player) => player.score === 100), true);

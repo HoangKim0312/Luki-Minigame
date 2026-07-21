@@ -8,7 +8,7 @@ Website: <https://hoangkim0312.github.io/Luki-Minigame/>
 
 - 5 game có thể tạo phòng: **Chung Tần Số**, **Ai Đã Nói?**, **Nghĩ Quanh Con Số**, **Điểm Giao Nhau** và **Ý Kiến Nóng**.
 - **Nghĩ Quanh Con Số** phát riêng cho mỗi người một số 0–99, không dùng AI và không giới hạn vòng; người chơi tự hỏi nhau, đoán, lật số đúng rồi phát bộ số mới.
-- **Điểm Giao Nhau** dành cho đúng 2 người: mỗi người nhận một từ, cùng gửi kín một liên tưởng; nếu khác nhau, hai đáp án trở thành cặp từ mới cho tới khi hội tụ. So khớp bỏ qua viết hoa/thường, dấu tiếng Việt, dấu câu và khoảng trắng thừa.
+- **Điểm Giao Nhau** dành cho đúng 2 người: mỗi người nhận một từ, cùng gửi kín một liên tưởng và đánh dấu sẵn sàng; khi cả hai ready, bàn chơi đếm ngược 3 giây rồi mới lật đáp án. Nếu khác nhau, hai đáp án trở thành cặp từ mới cho tới khi hội tụ. So khớp bỏ qua viết hoa/thường, dấu tiếng Việt, dấu câu và khoảng trắng thừa.
 - Người chơi ngồi quanh cùng một board; trạng thái đã trả lời được hiển thị nhưng đáp án vẫn úp cho tới lúc host lật bài.
 - Khách vào phòng bằng tên + mã, không cần tài khoản.
 - Người chơi có thể đăng ký để lưu danh tính; admin đăng nhập bằng tài khoản do backend tạo.

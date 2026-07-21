@@ -281,6 +281,18 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .convergence-form { width:min(100%,570px); display:grid; grid-template-columns:1fr auto; gap:8px; margin-top:20px; }
 .convergence-form input { min-width:0; height:54px; border:1px solid #3a3a46; background:#0f0f17; color:white; padding:0 16px; outline:0; font-size:13px; }
 .convergence-form input:focus { border-color:#72dcff; box-shadow:0 0 0 3px rgba(114,220,255,.08); }
+.ready-status { width:min(100%,500px); display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:2px 0 15px; }
+.ready-status>div { min-width:0; display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid #34343f; background:rgba(9,9,14,.45); text-align:left; }
+.ready-status i { width:28px; height:28px; flex:0 0 auto; display:grid; place-items:center; border-radius:50%; background:#292933; color:#777680; font-style:normal; font-size:11px; }
+.ready-status span { min-width:0; overflow:hidden; text-overflow:ellipsis; font-size:9px; font-weight:700; }
+.ready-status small { display:block; margin-top:2px; color:#777680; font-size:7px; text-transform:uppercase; letter-spacing:.08em; }
+.ready-status>div.ready { border-color:rgba(201,255,74,.35); background:rgba(201,255,74,.05); }
+.ready-status>div.ready i { background:var(--lime); color:#111; box-shadow:0 0 18px rgba(201,255,74,.24); }
+.ready-status>div.ready small { color:var(--lime); }
+.convergence-countdown { min-height:145px; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.convergence-countdown small { color:#9b9aa4; font-size:9px; text-transform:uppercase; letter-spacing:.1em; }
+.convergence-countdown strong { font-family:var(--font-display); font-size:88px; line-height:1; margin-top:10px; color:var(--lime); text-shadow:0 0 35px rgba(201,255,74,.34); animation:countdown-pop .45s ease-out; }
+@keyframes countdown-pop { from { opacity:.25; transform:scale(.65); } to { opacity:1; transform:scale(1); } }
 .normalization-note { color:#74747e; margin-top:13px; font-size:8px; }
 .convergence-result h1 { max-width:610px; }
 .word-pair.answers .word-card { min-height:125px; }

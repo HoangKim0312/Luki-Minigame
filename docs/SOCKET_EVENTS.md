@@ -36,4 +36,4 @@ Mọi event mutation đều dùng acknowledgement `{ ok, data | error }`.
 
 Client lưu `luki-resume-{ROOM_CODE}` trên thiết bị. Khi Socket.IO reconnect hoặc trang refresh, client gửi token trong `room:join`. Server gắn socket mới vào cùng player và trả lại public/private state. Người chơi disconnected được giữ 30 giây; host migration xảy ra sau grace period.
 
-Với **Điểm Giao Nhau**, server chỉ công khai hai đáp án sau khi cả hai người đã gửi. Khi so khớp, server chuẩn hóa chữ hoa/thường, dấu tiếng Việt (kể cả `đ`), dấu câu và khoảng trắng.
+Với **Điểm Giao Nhau**, mỗi người nhập từ rồi đánh dấu sẵn sàng. Khi cả hai sẵn sàng, server phát mốc thời gian đếm ngược 3 giây và chỉ công khai hai đáp án sau khi countdown kết thúc. Khi so khớp, server chuẩn hóa chữ hoa/thường, dấu tiếng Việt (kể cả `đ`), dấu câu và khoảng trắng.
