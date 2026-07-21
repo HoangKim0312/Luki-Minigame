@@ -1,6 +1,6 @@
 import type { Locale } from "../app/i18n-provider";
 
-export type GameKind = "match" | "guess-author" | "number" | "prompt";
+export type GameKind = "match" | "guess-author" | "number" | "convergence" | "prompt";
 
 export type GameDefinition = {
   id: string;
@@ -41,6 +41,12 @@ export const defaultGames: GameDefinition[] = [
     id: "number", icon: "37", kind: "number", minPlayers: 2, maxPlayers: 8, minutes: "∞", tone: "violet", published: true, aiEnabled: false, topic: "",
     name: { vi: "Nghĩ Quanh Con Số", en: "Think Around the Number" },
     description: { vi: "Mỗi người nhận một số bí mật từ 0–99. Hỏi lẫn nhau, đoán số của bạn bè và chơi không giới hạn lượt.", en: "Everyone gets a secret number from 0–99. Ask each other questions, guess friends’ numbers, and play without a round limit." },
+    questions: { vi: [], en: [] },
+  },
+  {
+    id: "convergence", icon: "↝", kind: "convergence", minPlayers: 2, maxPlayers: 2, minutes: "∞", tone: "sky", published: true, aiEnabled: false, topic: "",
+    name: { vi: "Điểm Giao Nhau", en: "Word Convergence" },
+    description: { vi: "Hai người bắt đầu bằng hai từ khác nhau, cùng tìm một từ liên quan và tiếp tục cho tới khi suy nghĩ trùng nhau.", en: "Two players start with different words and keep finding shared connections until their answers converge." },
     questions: { vi: [], en: [] },
   },
   {

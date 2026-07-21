@@ -27,6 +27,13 @@ export type PublicRoomState = {
     | { status: "playing" }
     | { status: "correct"; targetId: string; targetName: string; guesserName: string }
     | { status: "revealed"; targetId: string; targetName: string; guesserName: string; number: number };
+  convergence?: {
+    step: number;
+    words: Record<string, string>;
+    status: "thinking" | "different" | "matched";
+    answers?: Record<string, string>;
+    match?: string;
+  };
   revision: number;
   createdAt: number;
   expiresAt: number;
@@ -62,4 +69,7 @@ export interface ClientToServerEvents {
   "game:number-guess": (input: { targetId: string; guess: number }, ack: (result: SocketAck<{ correct: boolean }>) => void) => void;
   "game:number-reveal": (input: Record<string, never>, ack: (result: SocketAck) => void) => void;
   "game:number-next": (input: Record<string, never>, ack: (result: SocketAck) => void) => void;
+  "game:convergence-submit": (input: { answer: string }, ack: (result: SocketAck) => void) => void;
+  "game:convergence-next": (input: Record<string, never>, ack: (result: SocketAck) => void) => void;
+  "game:convergence-restart": (input: Record<string, never>, ack: (result: SocketAck) => void) => void;
 }

@@ -33,13 +33,14 @@ Kết luận: project vẫn thuộc **Phase 1**, chưa nên đánh dấu Phase 1
 - Phase 2 một phần: public/private payload, duplicate-answer protection, server-side score và reveal.
 - Phase 4 một phần: AI provider Groq, structured JSON, Zod validation và fallback questions.
 - UI/admin: login tùy chọn, game workshop, board và thẻ úp/lật.
+- Game realtime riêng: **Nghĩ Quanh Con Số** và **Điểm Giao Nhau** (chuỗi liên tưởng 2 người cho tới khi trùng đáp án).
 
 ## Bước kế tiếp
 
 1. Thêm PostgreSQL, Prisma schema/migrations và Redis.
 2. Tách state machine/game engine khỏi transport Socket.IO.
 3. Thêm timer server-authoritative và event log/idempotency key.
-4. Hoàn thiện state machine riêng cho Same Wavelength và Who Said It; Think Around the Number đã có luồng số bí mật, đoán, reveal và phát số mới không giới hạn.
+4. Hoàn thiện state machine riêng cho Same Wavelength và Who Said It; Think Around the Number và Word Convergence đã có state machine realtime riêng.
 5. Sau đó mới chuyển sang WebRTC voice ở Phase 6.
 
 ## Rủi ro hiện còn

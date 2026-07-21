@@ -25,7 +25,7 @@ function waitFor(socket, event, predicate) {
   });
 }
 
-test("server keeps answers private until the host reveals them", async (context) => {
+test("server protects secrets and runs realtime game transitions", async (context) => {
   const server = spawn(process.execPath, ["node_modules/tsx/dist/cli.mjs", "server/index.ts"], {
     cwd: new URL("..", import.meta.url),
     env: { ...process.env, PORT: String(port), GROQ_API_KEY: "", SESSION_SECRET: "integration-test-secret" },
@@ -100,4 +100,46 @@ test("server keeps answers private until the host reveals them", async (context)
   await emit(numberHost, "game:number-next", {});
   const nextPrivate = await nextPrivatePromise;
   assert.equal(Number.isInteger(nextPrivate.secretNumber), true);
+
+  const convergenceHost = io(url, { transports: ["websocket"] });
+  const convergenceGuest = io(url, { transports: ["websocket"] });
+  context.after(() => { convergenceHost.disconnect(); convergenceGuest.disconnect(); });
+  await Promise.all([once(convergenceHost, "connect"), once(convergenceGuest, "connect")]);
+  const convergenceCreated = await emit(convergenceHost, "room:create", { name: "An", gameId: "convergence", language: "vi", rounds: 7 });
+  assert.equal(convergenceCreated.ok, true);
+  const convergenceCode = convergenceCreated.data.room.code;
+  await emit(convergenceGuest, "room:join", { code: convergenceCode, name: "Bình" });
+  await emit(convergenceHost, "room:ready", { ready: true });
+  await emit(convergenceGuest, "room:ready", { ready: true });
+  const convergenceStartedPromise = waitFor(convergenceGuest, "server:room-state", state => state.gameId === "convergence" && state.phase === "answering");
+  await emit(convergenceHost, "room:start", {});
+  const convergenceStarted = await convergenceStartedPromise;
+  assert.equal(convergenceStarted.rounds, 0);
+  assert.equal(convergenceStarted.convergence.status, "thinking");
+  assert.equal(Object.values(convergenceStarted.convergence.words).length, 2);
+  assert.equal(new Set(Object.values(convergenceStarted.convergence.words)).size, 2);
+
+  await emit(convergenceHost, "game:convergence-submit", { answer: "Mưa" });
+  const differentPromise = waitFor(convergenceGuest, "server:room-state", state => state.convergence?.status === "different");
+  await emit(convergenceGuest, "game:convergence-submit", { answer: "Nắng" });
+  const different = await differentPromise;
+  assert.deepEqual(Object.values(different.convergence.answers), ["Mưa", "Nắng"]);
+  const continuedPromise = waitFor(convergenceGuest, "server:room-state", state => state.convergence?.status === "thinking" && state.convergence.step === 2);
+  await emit(convergenceGuest, "game:convergence-next", {});
+  const continued = await continuedPromise;
+  assert.deepEqual(Object.values(continued.convergence.words), ["Mưa", "Nắng"]);
+  assert.equal(continued.revealedAnswers, undefined);
+
+  await emit(convergenceHost, "game:convergence-submit", { answer: "Cà Phê!" });
+  const matchedPromise = waitFor(convergenceGuest, "server:room-state", state => state.convergence?.status === "matched");
+  await emit(convergenceGuest, "game:convergence-submit", { answer: "  ca   phe  " });
+  const matched = await matchedPromise;
+  assert.equal(matched.convergence.match, "Cà Phê!");
+  assert.equal(matched.players.every((player) => player.score === 100), true);
+
+  const restartedPromise = waitFor(convergenceGuest, "server:room-state", state => state.convergence?.status === "thinking" && state.convergence.step === 1);
+  await emit(convergenceHost, "game:convergence-restart", {});
+  const restarted = await restartedPromise;
+  assert.equal(restarted.phase, "answering");
+  assert.equal(restarted.answeredPlayerIds.length, 0);
 });
