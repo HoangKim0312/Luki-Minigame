@@ -85,6 +85,11 @@ test("server protects secrets and runs realtime game transitions", async (contex
   assert.equal(numberPublic.revealedAnswers, undefined);
   assert.equal(numberPublic.rounds, 0);
 
+  const chatStatePromise = waitFor(numberGuest, "server:room-state", state => state.chatMessages.some(message => message.text === "Số này có lớn hơn 50 không? 🎯"));
+  await emit(numberHost, "game:number-chat", { message: "Số này có lớn hơn 50 không? 🎯" });
+  const chatState = await chatStatePromise;
+  assert.equal(chatState.chatMessages.at(-1).senderName, "Nora");
+
   const correctStatePromise = waitFor(numberGuest, "server:room-state", state => state.numberRound?.status === "correct");
   const guessResult = await emit(numberGuest, "game:number-guess", { targetId: hostPrivate.playerId, guess: hostPrivate.secretNumber });
   assert.equal(guessResult.data.correct, true);
