@@ -18,5 +18,10 @@ export function getBackendUrl() {
     window.localStorage.setItem(STORAGE_KEY, queryUrl);
     return queryUrl;
   }
-  return validBackendUrl(window.localStorage.getItem(STORAGE_KEY)) || DEFAULT_BACKEND_URL;
+  const configuredUrl = validBackendUrl(DEFAULT_BACKEND_URL);
+  if (configuredUrl && !/^https?:\/\/(localhost|127\.0\.0\.1)(:|$)/.test(configuredUrl)) {
+    window.localStorage.setItem(STORAGE_KEY, configuredUrl);
+    return configuredUrl;
+  }
+  return validBackendUrl(window.localStorage.getItem(STORAGE_KEY)) || configuredUrl || DEFAULT_BACKEND_URL;
 }

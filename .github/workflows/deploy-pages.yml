@@ -32,7 +32,7 @@ jobs:
       - name: Build static site
         run: npm run build:pages
         env:
-          NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_API_URL: https://luki-minigame-production.up.railway.app
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
