@@ -99,13 +99,27 @@ function startTunnel() {
   });
 }
 
+function monitorTunnel(tunnel) {
+  tunnel.once("error", error => {
+    if (stopping) return;
+    console.error(`\nCloudflare tunnel failed: ${error.message}`);
+    stop(1);
+  });
+  tunnel.once("exit", code => {
+    if (stopping) return;
+    console.error(`\nCloudflare tunnel stopped unexpectedly (${code ?? "signal"}). The share link is no longer valid.`);
+    stop(1);
+  });
+}
+
 process.on("SIGINT", () => stop(0));
 process.on("SIGTERM", () => stop(0));
 
 try {
   await startBackend();
   console.log("… Creating a free HTTPS/WSS tunnel.");
-  const { url: tunnelUrl } = await startTunnel();
+  const { tunnel, url: tunnelUrl } = await startTunnel();
+  monitorTunnel(tunnel);
   const shareUrl = `${siteUrl}play/?server=${encodeURIComponent(tunnelUrl)}`;
   try {
     await waitForTunnelHealth(tunnelUrl, 8_000);

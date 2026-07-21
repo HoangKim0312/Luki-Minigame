@@ -33,4 +33,6 @@ test("persists a shared backend URL before client-side navigation", async () => 
 
   const launcher = await readFile(new URL("../scripts/dev-online.mjs", import.meta.url), "utf8");
   assert.match(launcher, /siteUrl\}play\/\?server=/);
+  assert.match(launcher, /monitorTunnel\(tunnel\)/);
+  assert.match(launcher, /Cloudflare tunnel stopped unexpectedly/);
 });
