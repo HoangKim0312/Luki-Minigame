@@ -56,6 +56,8 @@ npm run dev:online
 
 Lệnh này tự khởi động backend, tạo Cloudflare Quick Tunnel hỗ trợ HTTPS/WSS, kiểm tra kết nối và in ra một **Share this link**. Gửi nguyên link đó cho người chơi. Tham số `?server=...` được frontend lưu trên thiết bị, vì vậy không cần sửa GitHub variable hoặc deploy lại mỗi lần tunnel đổi URL. Giữ terminal mở trong lúc chơi; nhấn `Ctrl+C` để tắt backend và tunnel.
 
+Nếu Cloudflare đã báo `Registered tunnel connection` nhưng kiểm tra public còn đang chờ DNS, lệnh vẫn in link thay vì tự tắt. Đợi vài giây rồi refresh link là đủ. Không nên commit URL Quick Tunnel vào Git: URL chỉ tồn tại trong phiên chạy hiện tại và commit tự động sẽ làm bẩn lịch sử mà vẫn không giữ tunnel sống.
+
 Máy cần có `cloudflared` trong `PATH`. Có thể chỉ định đường dẫn riêng qua biến `CLOUDFLARED_PATH`.
 
 ### Tunnel cố định

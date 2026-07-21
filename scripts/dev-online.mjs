@@ -74,16 +74,28 @@ function startTunnel() {
   return new Promise((resolve, reject) => {
     const tunnel = start(process.env.CLOUDFLARED_PATH || "cloudflared", ["tunnel", "--url", backendUrl, "--protocol", "http2", "--no-autoupdate"]);
     let combined = "";
+    let tunnelUrl = "";
+    let registered = false;
+    let settled = false;
+    const timeout = setTimeout(() => {
+      if (!settled) reject(new Error("Cloudflare did not register the tunnel in time."));
+    }, 45_000);
     const inspect = chunk => {
       const text = chunk.toString();
       combined = `${combined}${text}`.slice(-20_000);
       const match = combined.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/i);
-      if (match) resolve({ tunnel, url: match[0], getLogs: () => combined });
+      if (match) tunnelUrl = match[0];
+      if (/Registered tunnel connection/i.test(combined)) registered = true;
+      if (!settled && tunnelUrl && registered) {
+        settled = true;
+        clearTimeout(timeout);
+        resolve({ tunnel, url: tunnelUrl });
+      }
     };
     tunnel.stdout.on("data", inspect);
     tunnel.stderr.on("data", inspect);
-    tunnel.once("error", error => reject(new Error(`Cannot start cloudflared: ${error.message}`)));
-    tunnel.once("exit", code => reject(new Error(`cloudflared exited before creating a tunnel (${code}).`)));
+    tunnel.once("error", error => { clearTimeout(timeout); reject(new Error(`Cannot start cloudflared: ${error.message}`)); });
+    tunnel.once("exit", code => { clearTimeout(timeout); if (!settled) reject(new Error(`cloudflared exited before creating a tunnel (${code}).`)); });
   });
 }
 
@@ -93,13 +105,13 @@ process.on("SIGTERM", () => stop(0));
 try {
   await startBackend();
   console.log("… Creating a free HTTPS/WSS tunnel.");
-  const { url: tunnelUrl, getLogs } = await startTunnel();
+  const { url: tunnelUrl } = await startTunnel();
   const shareUrl = `${siteUrl}?server=${encodeURIComponent(tunnelUrl)}`;
   try {
-    await waitForTunnelHealth(tunnelUrl, 30_000);
+    await waitForTunnelHealth(tunnelUrl, 8_000);
   } catch (error) {
-    const usefulLogs = getLogs().split("\n").filter(line => /ERR|error|connected|registered/i.test(line)).slice(-6).join("\n");
-    throw new Error(`${error instanceof Error ? error.message : error}${usefulLogs ? `\n${usefulLogs}` : ""}`);
+    console.warn(`! Tunnel is registered, but the public health check is still propagating (${error instanceof Error ? error.message : error}).`);
+    console.warn("  The share link is valid; wait a few seconds and reload it if the first connection is slow.");
   }
   console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   console.log("LUKI IS ONLINE");
