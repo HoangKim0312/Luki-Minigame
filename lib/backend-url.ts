@@ -20,3 +20,11 @@ export function getBackendUrl() {
   }
   return validBackendUrl(window.localStorage.getItem(STORAGE_KEY)) || DEFAULT_BACKEND_URL;
 }
+
+export function setBackendUrl(value: string) {
+  if (typeof window === "undefined") return false;
+  const backendUrl = validBackendUrl(value);
+  if (!backendUrl) return false;
+  window.localStorage.setItem(STORAGE_KEY, backendUrl);
+  return true;
+}

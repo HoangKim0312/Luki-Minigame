@@ -48,6 +48,8 @@ test("server protects secrets and runs realtime game transitions", async (contex
   const created = await emit(host, "room:create", { name: "Host", gameId: "wavelength", language: "vi", rounds: 1 });
   assert.equal(created.ok, true);
   const code = created.data.room.code;
+  const roomLookup = await fetch(`${url}/api/rooms/${code}`);
+  assert.equal(roomLookup.status, 200);
   const joined = await emit(guest, "room:join", { code, name: "Guest" });
   assert.equal(joined.ok, true);
   await emit(host, "room:ready", { ready: true });
