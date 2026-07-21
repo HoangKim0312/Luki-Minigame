@@ -1,4 +1,8 @@
 import type { Metadata, Viewport } from "next";
+import "@fontsource/be-vietnam-pro/400.css";
+import "@fontsource/be-vietnam-pro/500.css";
+import "@fontsource/be-vietnam-pro/600.css";
+import "@fontsource/be-vietnam-pro/700.css";
 import { I18nProvider } from "./i18n-provider";
 import "./globals.css";
 

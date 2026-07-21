@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --font-body: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-  --font-display: "Arial Narrow", "Segoe UI", Arial, sans-serif;
+  --font-body: "Be Vietnam Pro", "Segoe UI", sans-serif;
+  --font-display: "Be Vietnam Pro", "Segoe UI", sans-serif;
   --ink: #f4f2e9;
   --muted: #aaa9b1;
   --paper: #0b0b13;
