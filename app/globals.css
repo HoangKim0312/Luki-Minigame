@@ -149,6 +149,10 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .room-code span { color: var(--lime); font-size: 14px; margin-left: 7px; }
 .room-mode { font-size: 10px; color: #aaa9b1; border: 1px solid var(--line); padding: 10px 13px; border-radius: 22px; }
 .room-mode i { width: 6px; height: 6px; display: inline-block; border-radius: 50%; background: var(--lime); margin-right: 7px; }
+.room-mode.offline { color: var(--coral); border-color: rgba(255,142,112,.35); }
+.room-mode.offline i { background: var(--coral); }
+.socket-error { width:100%; margin:-16px 0 18px; padding:10px 14px; border:1px solid rgba(255,142,112,.35); background:rgba(255,142,112,.08); color:#ffb29e; cursor:pointer; font-size:10px; }
+.board-seat.disconnected { opacity:.45; filter:grayscale(.6); }
 .room-layout { display: grid; grid-template-columns: 260px 1fr; min-height: 625px; border: 1px solid #2c2c37; background: #111119; }
 .players-panel { background: #15151f; border-right: 1px solid #2b2b37; padding: 24px 18px; display: flex; flex-direction: column; }
 .panel-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }.panel-title h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .09em; margin: 0; }.panel-title span { color: #787781; font-size: 10px; }

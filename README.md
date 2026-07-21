@@ -11,7 +11,9 @@ Website: <https://hoangkim0312.github.io/Luki-Minigame/>
 - Khách vào phòng bằng tên + mã, không cần tài khoản.
 - Người chơi có thể đăng ký để lưu danh tính; admin đăng nhập bằng tài khoản do backend tạo.
 - Admin thêm/chỉnh game, bật/tắt xuất bản, sửa bộ câu hỏi VI/EN và tạo câu hỏi AI theo chủ đề.
-- Khi chưa có OpenAI API key, backend dùng bộ câu hỏi dự phòng để luồng quản trị vẫn hoạt động.
+- Phòng được đồng bộ giữa nhiều thiết bị bằng Socket.IO; server quyết định room state, điểm số và thời điểm reveal.
+- Resume token cho phép refresh/rejoin; người mất kết nối có 30 giây trước khi bị rời lobby hoặc chuyển host.
+- Groq tạo câu hỏi dạng JSON có kiểm tra schema; khi Groq lỗi backend dùng bộ câu hỏi dự phòng.
 
 ## Chạy frontend
 
@@ -32,7 +34,8 @@ Sao chép `.env.example` thành `.env.local`, sau đó thay ít nhất:
 SESSION_SECRET=mot-chuoi-ngau-nhien-dai
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=mat-khau-manh
-OPENAI_API_KEY=
+GROQ_API_KEY=
+GROQ_MODEL=openai/gpt-oss-20b
 ```
 
 Không commit `.env.local` và không đưa API key vào biến `NEXT_PUBLIC_*`.
@@ -41,7 +44,7 @@ Không commit `.env.local` và không đưa API key vào biến `NEXT_PUBLIC_*`.
 npm run dev:server
 ```
 
-Backend chạy ở `http://localhost:8787`. Lần chạy đầu sẽ tạo tài khoản admin và dữ liệu trong `.local-data/` (đã được gitignore). Model có thể đổi qua `OPENAI_MODEL`; mặc định là `gpt-5.6-sol`.
+Backend REST + Socket.IO chạy ở `http://localhost:8787`. Lần chạy đầu sẽ tạo tài khoản admin và dữ liệu trong `.local-data/` (đã được gitignore).
 
 ## Dùng backend local với GitHub Pages
 
@@ -52,7 +55,7 @@ Trang GitHub Pages chạy HTTPS nên trình duyệt không thể gọi thẳng b
 3. Trong GitHub repo, vào **Settings → Secrets and variables → Actions → Variables**, tạo `NEXT_PUBLIC_API_URL` với URL HTTPS của tunnel.
 4. Chạy lại workflow **Deploy GitHub Pages**.
 
-Nếu backend/tunnel tắt, website công khai vẫn tải và khách vẫn chơi bản local demo; đăng nhập, quản trị và AI sẽ tạm không dùng được.
+Tunnel phải hỗ trợ WebSocket (`wss://`). Nếu backend/tunnel tắt, website vẫn tải nhưng tạo phòng, vào phòng, đăng nhập, quản trị và AI sẽ tạm không dùng được.
 
 ## Kiểm tra và deploy
 
@@ -63,6 +66,10 @@ npm test
 
 Mỗi push lên `main` sẽ chạy `.github/workflows/deploy-pages.yml` và deploy thư mục static export. Vercel cũng có thể import trực tiếp repository; hãy đặt `NEXT_PUBLIC_API_URL` trong Project Environment Variables nếu dùng Vercel.
 
-## Lưu ý kiến trúc
+## Trạng thái roadmap
 
-Phòng hiện đồng bộ giữa các tab cùng trình duyệt bằng `localStorage`, phù hợp để demo UI/luật chơi. Để nhiều thiết bị chơi qua Internet thật sự, bước tiếp theo là chuyển room state, WebSocket và tính điểm sang backend server-authoritative. Backend auth hiện dùng token HMAC, mật khẩu băm bằng `scrypt`, và chỉ endpoint admin mới được phép thay đổi game/tạo câu hỏi AI.
+Project đang ở **Phase 1 (gần hoàn tất)**: guest session, room, lobby, Socket.IO, ready/start và reconnect cơ bản đã hoạt động. PostgreSQL và Redis chưa được thêm nên room vẫn nằm trong RAM và mất khi backend restart.
+
+Một phần Phase 2 và Phase 4 đã có sớm: tách public/private payload, server-authoritative reveal/score, AI provider Groq, schema validation và fallback. Timer engine, game-module interface hoàn chỉnh và ba bộ luật game riêng vẫn chưa hoàn tất.
+
+Xem [trạng thái phase](docs/PHASE_STATUS.md) và [tài liệu Socket.IO](docs/SOCKET_EVENTS.md).
