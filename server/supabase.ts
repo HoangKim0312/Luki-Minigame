@@ -93,8 +93,24 @@ export async function getSupabaseUser(accessToken: string) {
 }
 
 export async function getSupabaseProfile(userId: string) {
-  const profiles = await supabaseRest<Array<{ id: string; display_name: string; role: "admin" | "player"; locale: "vi" | "en" }>>(
-    `profiles?id=eq.${encodeURIComponent(userId)}&select=id,display_name,role,locale&limit=1`,
+  const profiles = await supabaseRest<Array<{ id: string; display_name: string; avatar_url?: string; role: "admin" | "player"; locale: "vi" | "en"; created_at: string }>>(
+    `profiles?id=eq.${encodeURIComponent(userId)}&select=id,display_name,avatar_url,role,locale,created_at&limit=1`,
   );
   return profiles[0];
+}
+
+export function updateSupabaseProfile(userId: string, input: { displayName: string; avatar?: string }) {
+  return supabaseRest(`profiles?id=eq.${encodeURIComponent(userId)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ display_name: input.displayName, avatar_url: input.avatar || null }),
+  });
+}
+
+export function updateSupabasePassword(userId: string, password: string) {
+  return request(`/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
+    method: "PUT",
+    serviceRole: true,
+    body: JSON.stringify({ password }),
+  });
 }

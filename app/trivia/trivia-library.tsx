@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { getBackendUrl } from "../../lib/backend-url";
+import { authApi } from "../auth-provider";
 import { getEstimatedQuizMinutes, type TriviaQuiz } from "../../lib/trivia";
 import { starterTriviaQuizzes } from "../../lib/trivia-seeds";
 
@@ -25,7 +25,7 @@ function LibrarySection({ title, quizzes }: { title: string; quizzes: TriviaQuiz
 export function TriviaLibrary() {
   const [quizzes, setQuizzes] = useState<TriviaQuiz[]>(starterTriviaQuizzes);
   const [status, setStatus] = useState("Đang đồng bộ thư viện…");
-  useEffect(() => { fetch(`${getBackendUrl()}/api/trivia/quizzes`).then(response => response.ok ? response.json() : Promise.reject()).then((data: { quizzes: TriviaQuiz[] }) => { setQuizzes(data.quizzes); setStatus(`${data.quizzes.length} bộ câu hỏi sẵn sàng`); }).catch(() => setStatus("Đang dùng thư viện mẫu ngoại tuyến")); }, []);
+  useEffect(() => { authApi<{ quizzes: TriviaQuiz[] }>("/api/trivia/quizzes").then(data => { setQuizzes(data.quizzes); setStatus(`${data.quizzes.length} bộ câu hỏi sẵn sàng`); }).catch(() => setStatus("Đang dùng thư viện mẫu ngoại tuyến")); }, []);
   const popular = useMemo(() => [...quizzes].sort((a, b) => b.plays - a.plays).slice(0, 4), [quizzes]);
   const mine = quizzes.filter(quiz => quiz.creator === "Bạn");
   return <main className="trivia-library">
