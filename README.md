@@ -93,13 +93,23 @@ Xem [trạng thái phase](docs/PHASE_STATUS.md) và [tài liệu Socket.IO](docs
 ## Supabase production database
 
 Schema hoàn chỉnh nằm tại `supabase/migrations/202607220001_initial_platform.sql`.
-Chạy file này một lần trong **Supabase Dashboard → SQL Editor**, sau đó điền các biến Railway:
+Điền các biến môi trường rồi chạy migration bằng npm:
 
 ```dotenv
 SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@db.YOUR_PROJECT_REF.supabase.co:5432/postgres
 ```
+
+```bash
+npm run migrate
+```
+
+Runner chỉ áp dụng file SQL mới trong `supabase/migrations/`, theo đúng thứ tự tên file.
+Không chỉnh sửa migration đã chạy; hãy tạo file mới như
+`202607230001_add_user_achievements.sql`. Checksum và lịch sử được lưu trong
+`public.schema_migrations`.
 
 `SUPABASE_SERVICE_ROLE_KEY` chỉ dành cho backend. Không đưa key này vào GitHub Pages hoặc
 biến bắt đầu bằng `NEXT_PUBLIC_*`. Khi env hợp lệ, backend tự động dùng:

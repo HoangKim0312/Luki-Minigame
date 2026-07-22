@@ -1,5 +1,3 @@
-begin;
-
 create extension if not exists pgcrypto;
 
 create or replace function public.set_updated_at()
@@ -359,5 +357,3 @@ grant select on public.profiles to authenticated;
 revoke update on public.profiles from authenticated;
 grant update (display_name, avatar_url, locale) on public.profiles to authenticated;
 grant select, insert, delete on public.quiz_favorites to authenticated;
-
-commit;
