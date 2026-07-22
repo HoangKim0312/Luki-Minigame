@@ -89,3 +89,34 @@ Project đang ở **Phase 1 (gần hoàn tất)**: guest session, room, lobby, S
 Một phần Phase 2 và Phase 4 đã có sớm: tách public/private payload, server-authoritative reveal/score, AI provider Groq, schema validation và fallback. Timer engine, game-module interface hoàn chỉnh và ba bộ luật game riêng vẫn chưa hoàn tất.
 
 Xem [trạng thái phase](docs/PHASE_STATUS.md) và [tài liệu Socket.IO](docs/SOCKET_EVENTS.md).
+
+## Supabase production database
+
+Schema hoàn chỉnh nằm tại `supabase/migrations/202607220001_initial_platform.sql`.
+Chạy file này một lần trong **Supabase Dashboard → SQL Editor**, sau đó điền các biến Railway:
+
+```dotenv
+SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+```
+
+`SUPABASE_SERVICE_ROLE_KEY` chỉ dành cho backend. Không đưa key này vào GitHub Pages hoặc
+biến bắt đầu bằng `NEXT_PUBLIC_*`. Khi env hợp lệ, backend tự động dùng:
+
+- Supabase Auth cho đăng ký, đăng nhập, access token và refresh token.
+- `profiles` cho tên hiển thị, ngôn ngữ và quyền `player`/`admin`.
+- Các bảng Trivia đã chuẩn hóa để lưu quiz, câu hỏi và đáp án.
+- JSON local chỉ làm fallback khi Supabase chưa được cấu hình.
+
+Sau khi tài khoản admin đã đăng ký, cấp quyền bằng SQL:
+
+```sql
+update public.profiles
+set role = 'admin'
+where id = (select id from auth.users where email = 'admin@example.com');
+```
+
+Migration cũng tạo bảng phòng, người tham gia, chat, Trivia session, câu trả lời và lịch sử
+điểm. RLS chặn trình duyệt truy cập trực tiếp các bảng gameplay; Railway backend vẫn là
+nguồn dữ liệu có thẩm quyền cho realtime và tính điểm.

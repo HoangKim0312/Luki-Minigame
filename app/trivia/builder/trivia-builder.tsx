@@ -15,6 +15,15 @@ import {
 
 const answerColors = ["red", "blue", "yellow", "green", "violet", "cyan"];
 
+function authenticatedHeaders() {
+  try {
+    const session = JSON.parse(localStorage.getItem("luki-session") || "null") as { token?: string } | null;
+    return { "Content-Type": "application/json", ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}) };
+  } catch {
+    return { "Content-Type": "application/json" };
+  }
+}
+
 function SelectField({ label, value, onChange, children }: { label: string; value: string | number; onChange: (value: string) => void; children: React.ReactNode }) {
   return <label className="builder-field"><span>{label}</span><select value={value} onChange={event => onChange(event.target.value)}>{children}</select></label>;
 }
@@ -42,13 +51,13 @@ function AiGenerator({ onClose, onGenerated }: { onClose: () => void; onGenerate
 
 export function TriviaBuilder() {
   const [quiz, setQuiz] = useState<TriviaQuiz>(() => createEmptyTriviaQuiz()); const [selectedId, setSelectedId] = useState(quiz.questions[0].id); const [showAi, setShowAi] = useState(false); const [notice, setNotice] = useState(""); const [saving, setSaving] = useState(false);
-  useEffect(() => { const params = new URLSearchParams(location.search); queueMicrotask(() => setShowAi(params.get("ai") === "1")); const id = params.get("id"); if (id) fetch(`${getBackendUrl()}/api/trivia/quizzes/${encodeURIComponent(id)}`).then(response => response.json()).then((data: { quiz?: TriviaQuiz }) => { if (data.quiz) { setQuiz(data.quiz); setSelectedId(data.quiz.questions[0]?.id ?? ""); } }).catch(() => setNotice("Không thể tải quiz từ máy chủ.")); }, []);
+  useEffect(() => { const params = new URLSearchParams(location.search); queueMicrotask(() => setShowAi(params.get("ai") === "1")); const id = params.get("id"); if (id) fetch(`${getBackendUrl()}/api/trivia/quizzes/${encodeURIComponent(id)}`, { headers: authenticatedHeaders() }).then(async response => { const data = await response.json() as { quiz?: TriviaQuiz; error?: string }; if (!response.ok) throw new Error(data.error || "Không thể tải quiz"); return data; }).then((data) => { if (data.quiz) { setQuiz(data.quiz); setSelectedId(data.quiz.questions[0]?.id ?? ""); } }).catch(reason => setNotice(reason instanceof Error ? reason.message : "Không thể tải quiz từ máy chủ.")); }, []);
   const selected = useMemo(() => quiz.questions.find(question => question.id === selectedId) ?? quiz.questions[0], [quiz, selectedId]);
   function updateQuestion(next: TriviaQuestion) { setQuiz(current => ({ ...current, questions: current.questions.map(question => question.id === next.id ? next : question) })); }
   function changeType(type: TriviaQuestionType) { const template = createTriviaQuestion(type); updateQuestion({ ...template, id: selected.id, prompt: selected.prompt, description: selected.description, category: selected.category, difficulty: selected.difficulty, tags: selected.tags, timeLimitSeconds: selected.timeLimitSeconds }); }
   function addQuestion() { const next = createTriviaQuestion("SINGLE_CHOICE", quiz.questions.length); setQuiz(current => ({ ...current, questions: [...current.questions, next] })); setSelectedId(next.id); }
   function moveQuestion(from: number, to: number) { setQuiz(current => { const questions = [...current.questions]; const [moved] = questions.splice(from, 1); questions.splice(to, 0, moved); return { ...current, questions }; }); }
-  async function save() { setSaving(true); setNotice(""); try { const response = await fetch(`${getBackendUrl()}/api/trivia/quizzes/${quiz.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(quiz) }); const data = await response.json() as { quiz?: TriviaQuiz; error?: string }; if (!response.ok || !data.quiz) throw new Error(data.error ?? "Không thể lưu"); setQuiz(data.quiz); setNotice("✓ Đã lưu bộ câu hỏi"); } catch (reason) { setNotice(reason instanceof Error ? reason.message : "Không thể lưu"); } finally { setSaving(false); } }
+  async function save() { setSaving(true); setNotice(""); try { const response = await fetch(`${getBackendUrl()}/api/trivia/quizzes/${quiz.id}`, { method: "PUT", headers: authenticatedHeaders(), body: JSON.stringify(quiz) }); const data = await response.json() as { quiz?: TriviaQuiz; error?: string }; if (!response.ok || !data.quiz) throw new Error(data.error ?? "Không thể lưu"); setQuiz(data.quiz); setNotice("✓ Đã lưu bộ câu hỏi"); } catch (reason) { setNotice(reason instanceof Error ? reason.message : "Không thể lưu"); } finally { setSaving(false); } }
   if (!selected) return null;
   return <main className="trivia-builder">
     <header className="builder-topbar"><Link className="trivia-brand" href="/trivia"><span>L</span>LUKI TRIVIA</Link><input className="quiz-title-input" value={quiz.title} onChange={event => setQuiz({ ...quiz, title: event.target.value })}/><div><span className="save-status">{notice}</span><button className="ai-mini-button" onClick={() => setShowAi(true)}>✨ AI</button><button className="button" onClick={save} disabled={saving}>{saving ? "Đang lưu…" : "Lưu quiz"}</button><Link className="preview-button" href={`/create?game=trivia&quiz=${quiz.id}`}>▶ Chơi thử</Link></div></header>
