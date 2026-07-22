@@ -1,6 +1,6 @@
 import type { Locale } from "../app/i18n-provider";
 
-export type GameKind = "match" | "guess-author" | "number" | "convergence" | "prompt";
+export type GameKind = "match" | "guess-author" | "number" | "convergence" | "prompt" | "trivia";
 
 export type GameDefinition = {
   id: string;
@@ -11,7 +11,7 @@ export type GameDefinition = {
   minPlayers: number;
   maxPlayers: number;
   minutes: string;
-  tone: "lime" | "violet" | "coral" | "sky";
+  tone: "lime" | "violet" | "coral" | "sky" | "amber";
   published: boolean;
   aiEnabled: boolean;
   topic: string;
@@ -19,6 +19,12 @@ export type GameDefinition = {
 };
 
 export const defaultGames: GameDefinition[] = [
+  {
+    id: "trivia", icon: "🧠", kind: "trivia", minPlayers: 2, maxPlayers: 16, minutes: "10–25", tone: "amber", published: true, aiEnabled: true, topic: "Kiến thức, party quiz và câu hỏi tùy chỉnh",
+    name: { vi: "Trivia", en: "Trivia" },
+    description: { vi: "Thi đấu bằng bộ câu hỏi của bạn, ghi điểm theo độ chính xác và tốc độ.", en: "Play custom quiz sets and score through accuracy and speed." },
+    questions: { vi: [], en: [] },
+  },
   {
     id: "wavelength", icon: "≈", kind: "match", minPlayers: 2, maxPlayers: 8, minutes: "10–15", tone: "lime", published: true, aiEnabled: true, topic: "Bạn bè, đời sống và những lựa chọn vui",
     name: { vi: "Chung Tần Số", en: "Same Wavelength" },

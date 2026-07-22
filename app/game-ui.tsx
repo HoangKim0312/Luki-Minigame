@@ -10,6 +10,7 @@ const themes: Record<GameDefinition["tone"], Record<string, string>> = {
   violet: { primary: "#b69cff", secondary: "#c9ff4a", accent: "#ff9f5a", glow: "rgba(182,156,255,.24)" },
   coral: { primary: "#ff8f70", secondary: "#ffcf56", accent: "#a994ff", glow: "rgba(255,143,112,.24)" },
   sky: { primary: "#6ee7ff", secondary: "#a994ff", accent: "#ffd85a", glow: "rgba(110,231,255,.22)" },
+  amber: { primary: "#ffd85a", secondary: "#a994ff", accent: "#ff7eb6", glow: "rgba(255,216,90,.22)" },
 };
 
 export function GameShell({tone,header,main,sidebar}:{tone:GameDefinition["tone"];header:ReactNode;main:ReactNode;sidebar:ReactNode}){

@@ -1,4 +1,5 @@
 import type { Locale } from "../app/i18n-provider";
+import type { PublicTriviaQuestion, TriviaAnswerPayload, TriviaSubmissionResult } from "./trivia";
 
 export type RoomPhase = "lobby" | "answering" | "reveal" | "finished";
 
@@ -44,6 +45,34 @@ export type PublicRoomState = {
     match?: string;
     revealAt?: number;
   };
+  trivia?: {
+    quizId: string;
+    quizTitle: string;
+    quizDescription: string;
+    quizCoverEmoji: string;
+    questionCount: number;
+    questionIndex: number;
+    phase: "lobby" | "intro" | "answering" | "reveal" | "leaderboard" | "finished" | "paused";
+    serverNow: number;
+    questionStartedAt?: number;
+    questionEndsAt?: number;
+    pausedRemainingMs?: number;
+    question?: PublicTriviaQuestion;
+    reveal?: {
+      correctOptionIds?: string[];
+      acceptedAnswers?: string[];
+      numberAnswer?: number;
+      numberMinimum?: number;
+      numberMaximum?: number;
+      correctOrder?: string[];
+      correctMatches?: Record<string, string>;
+      explanation?: string;
+      distribution: Record<string, number>;
+    };
+    previousRanks: Record<string, number>;
+    streaks: Record<string, number>;
+    autoAdvance: boolean;
+  };
   revision: number;
   createdAt: number;
   expiresAt: number;
@@ -54,6 +83,8 @@ export type PrivateRoomState = {
   answer?: string;
   resumeToken: string;
   secretNumber?: number;
+  triviaSubmission?: TriviaSubmissionResult;
+  triviaReview?: Array<{ questionId: string; prompt: string; playerAnswer: string; correctAnswer: string; points: number; responseTimeMs: number; correct?: boolean }>;
 };
 
 export type SocketAck<T = undefined> =
@@ -68,7 +99,7 @@ export interface ServerToClientEvents {
 }
 
 export interface ClientToServerEvents {
-  "room:create": (input: { name: string; gameId: string; language: Locale; rounds: number }, ack: (result: SocketAck<{ room: PublicRoomState; privateState: PrivateRoomState }>) => void) => void;
+  "room:create": (input: { name: string; gameId: string; language: Locale; rounds: number; quizId?: string }, ack: (result: SocketAck<{ room: PublicRoomState; privateState: PrivateRoomState }>) => void) => void;
   "room:join": (input: { code: string; name: string; resumeToken?: string }, ack: (result: SocketAck<{ room: PublicRoomState; privateState: PrivateRoomState }>) => void) => void;
   "room:ready": (input: { ready: boolean }, ack: (result: SocketAck) => void) => void;
   "room:start": (input: Record<string, never>, ack: (result: SocketAck) => void) => void;
@@ -83,4 +114,10 @@ export interface ClientToServerEvents {
   "game:convergence-submit": (input: { answer: string }, ack: (result: SocketAck) => void) => void;
   "game:convergence-next": (input: Record<string, never>, ack: (result: SocketAck) => void) => void;
   "game:convergence-restart": (input: Record<string, never>, ack: (result: SocketAck) => void) => void;
+  "trivia:submit-answer": (input: { answer: TriviaAnswerPayload }, ack: (result: SocketAck<{ potentialScore: number; submittedAt: number }>) => void) => void;
+  "trivia:reveal": (input: Record<string, never>, ack: (result: SocketAck) => void) => void;
+  "trivia:next": (input: Record<string, never>, ack: (result: SocketAck) => void) => void;
+  "trivia:skip": (input: Record<string, never>, ack: (result: SocketAck) => void) => void;
+  "trivia:pause": (input: Record<string, never>, ack: (result: SocketAck) => void) => void;
+  "trivia:restart": (input: Record<string, never>, ack: (result: SocketAck) => void) => void;
 }
