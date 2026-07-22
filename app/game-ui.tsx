@@ -36,17 +36,17 @@ export function GameHeader({icon,name,code,connected,labels}:{icon:string;name:s
 
 function avatarTone(name:string){return [...name].reduce((sum,char)=>sum+char.charCodeAt(0),0)%6}
 
-export function PlayerCard({player,isHost,isYou,phase,answered,labels}:{player:PublicPlayer;isHost:boolean;isYou:boolean;phase:RoomPhase;answered:boolean;labels:{host:string;you:string;ready:string;thinking:string;answered:string;offline:string}}){
+export function PlayerCard({player,isHost,isYou,phase,answered,labels}:{player:PublicPlayer;isHost:boolean;isYou:boolean;phase:RoomPhase;answered:boolean;labels:{host:string;you:string;ready:string;thinking:string;answered:string;reconnecting:string;offline:string}}){
   const isReady=phase==="lobby"&&player.ready;
-  const status=!player.connected?labels.offline:phase==="lobby"?(player.ready?labels.ready:labels.thinking):answered?labels.answered:`${player.score} pts`;
-  return <div className={`social-player ${isReady?"is-ready":""} ${answered?"has-answered":""} ${player.connected?"":"is-offline"}`}>
+  const status=player.connectionStatus==="reconnecting"?labels.reconnecting:player.connectionStatus==="offline"||!player.connected?labels.offline:phase==="lobby"?(player.ready?labels.ready:labels.thinking):answered?labels.answered:`${player.score} pts`;
+  return <div className={`social-player ${isReady?"is-ready":""} ${answered?"has-answered":""} ${player.connectionStatus==="reconnecting"?"is-reconnecting":player.connected?"":"is-offline"}`}>
     <span className={`social-avatar avatar-tone-${avatarTone(player.name)}`} aria-hidden="true">{player.name.slice(0,2).toUpperCase()}</span>
     <div><strong>{player.name}{isYou&&<em> · {labels.you}</em>}</strong><small>{status}</small></div>
     <span className="player-badges">{isHost&&<b title={labels.host}>♛</b>}{(isReady||answered)&&<i>✓</i>}</span>
   </div>
 }
 
-export function GameSidebar({players,hostId,playerId,phase,answeredIds,labels,inviteAction,children}:{players:PublicPlayer[];hostId:string;playerId:string;phase:RoomPhase;answeredIds:string[];labels:{players:string;host:string;you:string;ready:string;thinking:string;answered:string;offline:string;invite:string};inviteAction?:()=>void;children:ReactNode}){
+export function GameSidebar({players,hostId,playerId,phase,answeredIds,labels,inviteAction,children}:{players:PublicPlayer[];hostId:string;playerId:string;phase:RoomPhase;answeredIds:string[];labels:{players:string;host:string;you:string;ready:string;thinking:string;answered:string;reconnecting:string;offline:string;invite:string};inviteAction?:()=>void;children:ReactNode}){
   return <aside className="game-sidebar">
     <section className="players-card">
       <header><div><span>👥</span><strong>{labels.players}</strong></div><b>{players.filter(player=>player.connected).length}/{players.length}</b></header>

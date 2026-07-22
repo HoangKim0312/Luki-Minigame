@@ -17,7 +17,9 @@ export function getSocket() {
       transports: ["websocket", "polling"],
       reconnection: true,
       reconnectionAttempts: Infinity,
+      reconnectionDelay: 800,
       reconnectionDelayMax: 5000,
+      randomizationFactor: 0.4,
     });
   }
   return socket;
@@ -41,6 +43,10 @@ export async function connectSocket(timeoutMs = 8000) {
 export function emitWithAck<T>(event: keyof ClientToServerEvents, payload: unknown) {
   const client = getSocket();
   return new Promise<SocketAck<T>>((resolve) => {
+    if (!client.connected) {
+      resolve({ ok: false, error: "Đang kết nối lại với phòng…" });
+      return;
+    }
     const emitter = client.timeout(8000) as unknown as { emit: (name: string, data: unknown, callback: (error: Error | null, result: SocketAck<T>) => void) => void };
     emitter.emit(event, payload, (error, result) => {
       resolve(error ? { ok: false, error: "Máy chủ không phản hồi." } : result);

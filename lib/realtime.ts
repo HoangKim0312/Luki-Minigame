@@ -9,6 +9,7 @@ export type PublicPlayer = {
   ready: boolean;
   score: number;
   connected: boolean;
+  connectionStatus: "connected" | "reconnecting" | "offline";
   isBot?: boolean;
 };
 

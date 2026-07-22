@@ -483,6 +483,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .social-player-list { max-height: 255px; display: grid; gap: 7px; overflow-y: auto; }
 .social-player { min-width: 0; display: grid; grid-template-columns: 43px minmax(0,1fr) auto; align-items: center; gap: 11px; padding: 8px; border-radius: 15px; background: rgba(255,255,255,.055); }
 .social-player.is-ready, .social-player.has-answered { background: color-mix(in srgb, var(--game-primary) 9%, transparent); }
+.social-player.is-reconnecting { opacity: .82; }
+.social-player.is-reconnecting small { color: #ffd36e; }
 .social-player.is-offline { opacity: .52; filter: grayscale(.6); }
 .social-avatar { width: 43px; height: 43px; display: grid; place-items: center; border-radius: 14px; color: #171022; font-size: 10px; font-weight: 900; box-shadow: inset 0 -4px 0 rgba(0,0,0,.13); }
 .social-avatar.avatar-tone-0 { background: #c9ff4a; }.social-avatar.avatar-tone-1 { background: #a994ff; }.social-avatar.avatar-tone-2 { background: #ff7eb6; }.social-avatar.avatar-tone-3 { background: #6ee7ff; }.social-avatar.avatar-tone-4 { background: #ff9f5a; }.social-avatar.avatar-tone-5 { background: #ffd85a; }
