@@ -6,6 +6,7 @@ import { challenges, collectibles, leaderboard, modes, worlds } from "@/lib/arch
 import { isAcceptedAnswer } from "@/lib/answer";
 import { GuessMediaPlayer } from "./guess-media-player";
 import { RemoteMediaImage } from "./remote-media-image";
+import { authApi, useAuth } from "../auth-provider";
 
 type View = "home" | "explore" | "play" | "challenge" | "daily" | "collection" | "leaderboard" | "profile" | "admin" | "world" | "copyright" | "report";
 
@@ -134,36 +135,66 @@ function PlayView() {
 }
 
 function ChallengeView({ challengeId }: { challengeId?: string }) {
+  const { status } = useAuth();
   const challenge = challenges.find((item) => item.id === challengeId) ?? challenges[0];
   const world = worlds.find((item) => item.id === challenge.worldId) ?? worlds[0];
   const [answer, setAnswer] = useState("");
   const [hintCount, setHintCount] = useState(0);
   const [result, setResult] = useState<null | { correct: boolean; score: number; fragments: number }>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionError, setSessionError] = useState("");
   const score = [1000, 750, 500, 300, 100][Math.min(hintCount, 4)];
+
+  const ensureSession = async () => {
+    if (sessionId) return sessionId;
+    const created = await authApi<{ sessionId: string }>("/api/game-sessions", {
+      method: "POST",
+      body: JSON.stringify({ challengeId: challenge.id }),
+    });
+    setSessionId(created.sessionId);
+    return created.sessionId;
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!answer || result) return;
     setSubmitting(true);
-    let next = { correct: isAcceptedAnswer(answer, [challenge.answer, ...challenge.aliases]), score: 0, fragments: 0 };
-    next.score = next.correct ? score : 0;
-    next.fragments = next.correct ? Math.max(1, 3 - hintCount) : 0;
-    try {
-      const response = await fetch("/api/game-sessions/demo/submit-answer", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ challengeId: challenge.id, answer, hintCount }) });
-      if (response.ok) {
-        const payload = await response.json() as { correct: boolean; score: number; reward: { fragments: number } };
-        next = { correct: payload.correct, score: payload.score, fragments: payload.reward.fragments };
+    setSessionError("");
+    if (status === "authenticated") {
+      try {
+        const currentSessionId = await ensureSession();
+        const payload = await authApi<{ correct: boolean; score: number; reward: { fragments: number } }>(`/api/game-sessions/${currentSessionId}/submit-answer`, {
+          method: "POST",
+          body: JSON.stringify({ answer }),
+        });
+        setResult({ correct: payload.correct, score: payload.score, fragments: payload.reward.fragments });
+      } catch (caught) {
+        setSessionError(caught instanceof Error ? caught.message : "Không thể xác minh đáp án.");
+      } finally {
+        setSubmitting(false);
       }
-    } catch {
-      // The interactive preview keeps working before a local D1 binding is attached.
+      return;
     }
+    const correct = isAcceptedAnswer(answer, [challenge.answer, ...challenge.aliases]);
+    const next = { correct, score: correct ? score : 0, fragments: correct ? Math.max(1, 3 - hintCount) : 0 };
     setResult(next);
     setSubmitting(false);
   };
 
-  const openHint = () => {
-    if (hintCount < challenge.hints.length && !result) setHintCount((value) => value + 1);
+  const openHint = async () => {
+    if (hintCount >= challenge.hints.length || result) return;
+    setSessionError("");
+    if (status === "authenticated") {
+      try {
+        const currentSessionId = await ensureSession();
+        await authApi(`/api/game-sessions/${currentSessionId}/open-hint`, { method: "POST" });
+      } catch (caught) {
+        setSessionError(caught instanceof Error ? caught.message : "Không thể mở hint.");
+        return;
+      }
+    }
+    setHintCount((value) => value + 1);
   };
 
   return (
@@ -190,7 +221,8 @@ function ChallengeView({ challengeId }: { challengeId?: string }) {
             <form className="answer-box" onSubmit={submit}><label htmlFor="answer">Nhập đáp án</label><div><input id="answer" value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="Tên anime, game hoặc character..." autoComplete="off" disabled={Boolean(result)} /><button disabled={!answer || submitting || Boolean(result)}>Xác nhận →</button></div></form>
           )}
           {challenge.options && <button className="button primary submit-option" type="button" onClick={(event) => void submit(event as unknown as FormEvent)} disabled={!answer || submitting || Boolean(result)}>Xác nhận đáp án</button>}
-          {!result && <button className="hint-button" onClick={openHint} disabled={hintCount >= challenge.hints.length}>⌁ Mở hint tiếp theo <span>−250 điểm</span></button>}
+          {!result && <button className="hint-button" onClick={() => void openHint()} disabled={hintCount >= challenge.hints.length}>⌁ Mở hint tiếp theo <span>−250 điểm</span></button>}
+          {sessionError && <div className="admin-notice">{sessionError} {status !== "authenticated" && <Link href="/login">Đăng nhập</Link>}</div>}
           {result && <div className={`result-panel ${result.correct ? "correct" : "wrong"}`}><span>{result.correct ? "✓" : "×"}</span><div><small>{result.correct ? "MEMORY RESTORED" : "SIGNAL LOST"}</small><h2>{result.correct ? "Chính xác!" : "Chưa đúng"}</h2><p>Đáp án: <b>{challenge.answer}</b></p>{challenge.media && <p className="attribution">{challenge.media.attribution}</p>}</div><aside><strong>+{result.score}</strong><small>điểm</small><b>◆ +{result.fragments} fragments</b></aside></div>}
           {result && <div className="result-actions"><Link className="button ghost" href="/collection">Xem collection</Link><Link className="button primary" href="/play">Challenge tiếp →</Link></div>}
         </div>
@@ -210,15 +242,34 @@ function DailyView() {
 }
 
 function CollectionView() {
+  const { status } = useAuth();
   const [selected, setSelected] = useState(collectibles[0]);
   const [restored, setRestored] = useState<string[]>(collectibles.filter((item) => item.unlocked).map((item) => item.id));
+  const [restoreError, setRestoreError] = useState("");
+  const [restoring, setRestoring] = useState(false);
   const isRestored = restored.includes(selected.id);
+  const restore = async () => {
+    setRestoreError("");
+    if (status !== "authenticated") {
+      setRestoreError("Đăng nhập để lưu collectible vào Supabase.");
+      return;
+    }
+    setRestoring(true);
+    try {
+      await authApi(`/api/collectibles/${selected.id}/restore`, { method: "POST" });
+      setRestored((items) => [...items, selected.id]);
+    } catch (caught) {
+      setRestoreError(caught instanceof Error ? caught.message : "Không thể restore collectible.");
+    } finally {
+      setRestoring(false);
+    }
+  };
   return (
     <section className="page-section top-section">
       <div className="page-intro split"><div><p className="kicker"><span /> Personal vault</p><h1>Collection<br /><em>của bạn</em></h1></div><div className="collection-summary"><span><b>{restored.length}</b> / {collectibles.length} restored</span><i><b style={{ width: `${restored.length / collectibles.length * 100}%` }} /></i><small>◆ 12 fragments khả dụng</small></div></div>
       <div className="collection-layout">
         <div className="collectible-grid">{collectibles.map((item) => <button key={item.id} onClick={() => setSelected(item)} className={`${selected.id === item.id ? "selected" : ""} ${restored.includes(item.id) ? "" : "locked"}`}><RemoteMediaImage src={item.image} alt={item.name} /><span className={`rarity ${item.rarity}`}>{item.rarity}</span><div><small>{item.type}</small><b>{restored.includes(item.id) ? item.name : "Unknown memory"}</b></div></button>)}</div>
-        <aside className="collectible-detail"><RemoteMediaImage src={selected.image} alt={selected.name} /><span className={`rarity ${selected.rarity}`}>{selected.rarity}</span><small>{selected.type}</small><h2>{isRestored ? selected.name : "Dữ liệu bị khóa"}</h2><p>{isRestored ? "Một ký ức đã được phục hồi và lưu an toàn trong Archive cá nhân." : "Dùng fragment cùng Archive World để khôi phục collectible này."}</p><div className="detail-cost"><span>Cần để restore</span><b>◆ {selected.cost} fragments</b></div><button className="button primary" disabled={isRestored || selected.cost > 12} onClick={() => setRestored((items) => [...items, selected.id])}>{isRestored ? "Đã phục hồi" : "Restore collectible"}</button></aside>
+        <aside className="collectible-detail"><RemoteMediaImage src={selected.image} alt={selected.name} /><span className={`rarity ${selected.rarity}`}>{selected.rarity}</span><small>{selected.type}</small><h2>{isRestored ? selected.name : "Dữ liệu bị khóa"}</h2><p>{isRestored ? "Một ký ức đã được phục hồi và lưu an toàn trong Archive cá nhân." : "Dùng fragment cùng Archive World để khôi phục collectible này."}</p><div className="detail-cost"><span>Cần để restore</span><b>◆ {selected.cost} fragments</b></div>{restoreError && <p className="admin-notice">{restoreError}</p>}<button className="button primary" disabled={isRestored || selected.cost > 12 || restoring} onClick={() => void restore()}>{isRestored ? "Đã phục hồi" : restoring ? "Đang restore..." : "Restore collectible"}</button></aside>
       </div>
     </section>
   );
@@ -266,7 +317,28 @@ function AdminView() {
   const [search, setSearch] = useState("");
   const [source, setSource] = useState("AniList");
   const [notice, setNotice] = useState("");
-  const submit = (event: FormEvent) => { event.preventDefault(); setNotice(`Đã gửi truy vấn "${search}" tới ${source} adapter.`); };
+  const [adminResults, setAdminResults] = useState<Array<{ source: "anilist" | "igdb"; sourceId: string; title: string; coverImageUrl: string | null; releaseYear: number | null; genres: string[] }>>([]);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setNotice("Đang tìm dữ liệu từ nguồn...");
+    try {
+      const sourceKey = source.toLowerCase() as "anilist" | "igdb";
+      const payload = await authApi<{ results: typeof adminResults }>(`/api/media/search?source=${sourceKey}&q=${encodeURIComponent(search)}`);
+      setAdminResults(payload.results);
+      setNotice(payload.results.length ? `Tìm thấy ${payload.results.length} kết quả.` : "Không tìm thấy kết quả.");
+    } catch (caught) {
+      setNotice(caught instanceof Error ? caught.message : "Không thể tìm dữ liệu.");
+    }
+  };
+  const importWorld = async (item: (typeof adminResults)[number]) => {
+    setNotice(`Đang import ${item.title}...`);
+    try {
+      await authApi("/api/admin/worlds/import", { method: "POST", body: JSON.stringify({ source: item.source, sourceId: item.sourceId, status: "draft" }) });
+      setNotice(`${item.title} đã được import vào Supabase ở trạng thái draft.`);
+    } catch (caught) {
+      setNotice(caught instanceof Error ? caught.message : "Import thất bại.");
+    }
+  };
   return (
     <section className="admin-page">
       <aside><p className="brand"><span className="brand-mark">A</span><span>ARCHIVE<br /><b>CONTROL</b></span></p><nav>{["Overview", "Import", "Worlds", "Collectibles", "Challenges", "Daily", "Media assets", "Reports", "Audit log"].map((item) => <button className={tab === item ? "active" : ""} onClick={() => setTab(item)} key={item}>{item}</button>)}</nav><Link href="/">← Về website</Link></aside>
@@ -276,7 +348,7 @@ function AdminView() {
           <section className="admin-panel wide"><div className="panel-head"><div><small>MEDIA SOURCE ADAPTER</small><h2>Tìm và import World</h2></div><span className="status-pill">ONLINE</span></div>
             <form className="import-form" onSubmit={submit}><select value={source} onChange={(event) => setSource(event.target.value)}><option>AniList</option><option>IGDB</option></select><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Nhập tên anime hoặc game..." required /><button>Tìm kiếm</button></form>
             {notice && <div className="admin-notice">{notice} Backend sẽ cache kết quả và không sao chép binary asset.</div>}
-            <div className="import-results">{worlds.slice(0, 3).map((world) => <div key={world.id}><RemoteMediaImage src={world.cover} alt={world.title} /><p><small>{world.source} · {world.year}</small><b>{world.title}</b><span>{world.genres.join(" · ")}</span></p><button onClick={() => setNotice(`${world.title} đã sẵn sàng để preview và import.`)}>Preview</button></div>)}</div>
+            <div className="import-results">{(adminResults.length ? adminResults : worlds.slice(0, 3).map((world) => ({ source: world.source, sourceId: world.id, title: world.title, coverImageUrl: world.cover, releaseYear: world.year, genres: world.genres }))).map((world) => <div key={`${world.source}-${world.sourceId}`}><RemoteMediaImage src={world.coverImageUrl} alt={world.title} /><p><small>{world.source} · {world.releaseYear}</small><b>{world.title}</b><span>{world.genres.join(" · ")}</span></p><button onClick={() => void importWorld(world)}>Import</button></div>)}</div>
           </section>
           <section className="admin-panel"><div className="panel-head"><div><small>SOURCE HEALTH</small><h2>Adapter status</h2></div></div>{[["AniList", "GraphQL · cached 20m"], ["IGDB", "Backend token · cached 20m"], ["R2 Media", "Signed playback URL"]].map(([name, meta]) => <p className="adapter-row" key={name}><i /><span><b>{name}</b><small>{meta}</small></span><em>Healthy</em></p>)}</section>
         </div> : tab === "Media assets" ? <MediaManager /> : <AdminOverview />}
@@ -291,12 +363,61 @@ function AdminOverview() {
 
 function MediaManager() {
   const [duration, setDuration] = useState(30);
-  return <div className="admin-grid"><section className="admin-panel wide"><div className="panel-head"><div><small>LICENSED MEDIA</small><h2>Thêm remote audio / video</h2></div><span className="status-pill warning">DRAFT</span></div><div className="media-form"><label>Remote HTTPS URL<input placeholder="https://cdn.partner.example/media/..." /></label><div><label>Media type<select><option>Audio</option><option>Video</option></select></label><label>Visual mode<select><option>Audio player</option><option>Visible</option><option>Blurred</option><option>Covered</option></select></label></div><div><label>Preview start<input type="time" step="1" defaultValue="00:00:12" /></label><label>Duration<select value={duration} onChange={(event) => setDuration(Number(event.target.value))}>{[5, 10, 15, 20, 30].map((value) => <option key={value} value={value}>{value} giây</option>)}</select></label></div><div className="timeline"><span style={{ left: "18%", width: `${duration * 2}%` }} /><small>Preview range · 00:12 → 00:{12 + duration}</small></div><label>Attribution<textarea placeholder="Nguồn, tác giả, chủ sở hữu..." /></label><label>License note<textarea placeholder="Mô tả quyền preview và full playback..." /></label><div className="form-actions"><button className="button ghost">Preview Guess Mode</button><button className="button primary">Lưu bản nháp</button></div></div></section><section className="admin-panel"><div className="panel-head"><div><small>CAPABILITY</small><h2>Playback rules</h2></div></div>{["Preview tối đa 30 giây", "Không autoplay có âm thanh", "Không tách audio khỏi video", "Full player chỉ sau reveal", "Official source fallback"].map((item) => <p className="check-row" key={item}>✓ <span>{item}</span></p>)}</section></div>;
+  const [notice, setNotice] = useState("");
+  const saveMedia = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const mediaType = String(form.get("mediaType")) as "audio" | "video";
+    try {
+      await authApi("/api/admin/media-assets", {
+        method: "POST",
+        body: JSON.stringify({
+          mediaType,
+          sourceType: mediaType === "audio" ? "remote_audio" : "remote_video",
+          sourceUrl: form.get("sourceUrl"),
+          title: form.get("title"),
+          mediaCategory: form.get("mediaCategory"),
+          previewStartSeconds: Number(form.get("previewStartSeconds")),
+          previewDurationSeconds: duration,
+          canPlayFullAfterReveal: form.get("fullPlayback") === "on",
+          licenseType: form.get("licenseType"),
+          licenseNote: form.get("licenseNote"),
+          attributionText: form.get("attributionText"),
+          officialSourceUrl: form.get("officialSourceUrl"),
+        }),
+      });
+      setNotice("Media asset đã được lưu vào Supabase ở trạng thái needs_review.");
+      event.currentTarget.reset();
+    } catch (caught) {
+      setNotice(caught instanceof Error ? caught.message : "Không thể lưu media.");
+    }
+  };
+  return <div className="admin-grid"><section className="admin-panel wide"><div className="panel-head"><div><small>LICENSED MEDIA</small><h2>Thêm remote audio / video</h2></div><span className="status-pill warning">DRAFT</span></div><form className="media-form" onSubmit={saveMedia}><label>Remote HTTPS URL<input name="sourceUrl" required type="url" placeholder="https://cdn.partner.example/media/..." /></label><label>Tiêu đề nội bộ<input name="title" required /></label><div><label>Media type<select name="mediaType"><option value="audio">Audio</option><option value="video">Video</option></select></label><label>Category<select name="mediaCategory"><option value="anime_opening">Anime opening</option><option value="game_soundtrack">Game soundtrack</option><option value="anime_scene">Anime scene</option><option value="other">Other</option></select></label></div><div><label>Preview start (giây)<input name="previewStartSeconds" type="number" min="0" defaultValue="12" /></label><label>Duration<select value={duration} onChange={(event) => setDuration(Number(event.target.value))}>{[5, 10, 15, 20, 30].map((value) => <option key={value} value={value}>{value} giây</option>)}</select></label></div><div className="timeline"><span style={{ left: "18%", width: `${duration * 2}%` }} /><small>Preview duration · {duration} giây</small></div><label>Attribution<textarea name="attributionText" required placeholder="Nguồn, tác giả, chủ sở hữu..." /></label><label>License type<input name="licenseType" required placeholder="licensed / royalty-free / public-domain" /></label><label>License note<textarea name="licenseNote" required placeholder="Mô tả quyền preview và full playback..." /></label><label>Official source URL<input name="officialSourceUrl" required type="url" /></label><label><input name="fullPlayback" type="checkbox" /> Cho phép full playback sau reveal</label>{notice && <p className="admin-notice">{notice}</p>}<div className="form-actions"><button className="button primary" type="submit">Lưu bản nháp</button></div></form></section><section className="admin-panel"><div className="panel-head"><div><small>CAPABILITY</small><h2>Playback rules</h2></div></div>{["Preview tối đa 30 giây", "Không autoplay có âm thanh", "Không tách audio khỏi video", "Full player chỉ sau reveal", "Official source fallback"].map((item) => <p className="check-row" key={item}>✓ <span>{item}</span></p>)}</section></div>;
 }
 
 function LegalView({ report = false }: { report?: boolean }) {
   const [sent, setSent] = useState(false);
-  if (report) return <section className="page-section top-section legal-page"><div className="page-intro"><p className="kicker"><span /> Content safety</p><h1>Báo cáo<br /><em>nội dung</em></h1><p>Asset bị disable sẽ lập tức ngừng xuất hiện trong challenge mới nhưng không xóa lịch sử hợp lệ.</p></div>{sent ? <div className="success-state"><span>✓</span><h2>Đã nhận báo cáo</h2><p>Admin sẽ kiểm tra attribution, license và nguồn phát.</p></div> : <form className="report-form" onSubmit={(event) => { event.preventDefault(); setSent(true); }}><label>Media asset ID<input required placeholder="UUID của media asset" /></label><label>Email liên hệ<input required type="email" /></label><label>Lý do<select><option>Vấn đề bản quyền</option><option>Nguồn không còn hoạt động</option><option>Attribution không đúng</option><option>Nội dung không phù hợp</option></select></label><label>Chi tiết<textarea required rows={6} /></label><button className="button primary">Gửi báo cáo →</button></form>}</section>;
+  const [reportError, setReportError] = useState("");
+  const sendReport = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setReportError("");
+    const form = new FormData(event.currentTarget);
+    try {
+      await authApi("/api/report-content", {
+        method: "POST",
+        body: JSON.stringify({
+          mediaAssetId: form.get("mediaAssetId"),
+          reporterEmail: form.get("reporterEmail"),
+          reason: form.get("reason"),
+          details: form.get("details"),
+        }),
+      });
+      setSent(true);
+    } catch (caught) {
+      setReportError(caught instanceof Error ? caught.message : "Không thể gửi báo cáo.");
+    }
+  };
+  if (report) return <section className="page-section top-section legal-page"><div className="page-intro"><p className="kicker"><span /> Content safety</p><h1>Báo cáo<br /><em>nội dung</em></h1><p>Asset bị disable sẽ lập tức ngừng xuất hiện trong challenge mới nhưng không xóa lịch sử hợp lệ.</p></div>{sent ? <div className="success-state"><span>✓</span><h2>Đã nhận báo cáo</h2><p>Admin sẽ kiểm tra attribution, license và nguồn phát.</p></div> : <form className="report-form" onSubmit={sendReport}><label>Media asset ID<input name="mediaAssetId" required placeholder="UUID của media asset" /></label><label>Email liên hệ<input name="reporterEmail" required type="email" /></label><label>Lý do<select name="reason"><option>Vấn đề bản quyền</option><option>Nguồn không còn hoạt động</option><option>Attribution không đúng</option><option>Nội dung không phù hợp</option></select></label><label>Chi tiết<textarea name="details" required rows={6} /></label>{reportError && <p className="admin-notice">{reportError}</p>}<button className="button primary">Gửi báo cáo →</button></form>}</section>;
   return <section className="page-section top-section legal-page"><div className="page-intro"><p className="kicker"><span /> Rights & attribution</p><h1>Copyright<br /><em>policy</em></h1></div><div className="legal-copy"><h2>Nguyên tắc nguồn media</h2><p>AniGame Archive không rip, tách audio, chuyển đổi hay tải media từ YouTube, Spotify hoặc nền tảng streaming. Audio và video luôn được phát ở định dạng gốc từ remote URL, object storage hoặc official embed có quyền phù hợp.</p><h2>Preview và full playback</h2><p>Mỗi asset khai báo capability riêng. Nếu nguồn không cho phép phát đầy đủ trên website, sau reveal người chơi được dẫn về nguồn chính thức. Website không bypass quảng cáo, branding, token hoặc access control.</p><h2>Yêu cầu gỡ nội dung</h2><p>Chủ sở hữu có thể gửi báo cáo kèm bằng chứng. Admin có thể disable ngay, xóa source URL và lưu audit log mà không sửa lịch sử điểm đã xác minh.</p><Link className="button primary" href="/report-content">Báo cáo nội dung →</Link></div></section>;
 }
 

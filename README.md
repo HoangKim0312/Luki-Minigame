@@ -2,28 +2,31 @@
 
 **Guess. Restore. Collect.**
 
-AniGame Archive là website mini-game và collection dành cho anime/game. Người chơi giải challenge để nhận fragment, dùng fragment phục hồi collectible, hoàn thành album, giữ daily streak và tranh hạng. Backend là nguồn sự thật cho đáp án, điểm và reward.
+AniGame Archive là website mini-game và collection dành cho anime/game. Kiến trúc production giữ nguyên nền tảng triển khai ban đầu của repository:
 
-## MVP đã có
+```text
+GitHub Pages (Next.js static frontend)
+            ↓ HTTPS REST
+Railway (authoritative Node.js backend)
+            ↓
+Supabase Auth + PostgreSQL + Storage
+```
 
-- Landing, Explore, Archive World, Play, Daily, Collection, Profile, Leaderboard và Admin dashboard responsive.
-- Engine dùng chung cho Hint Ladder, Cropped Memory, Character Trail, Asset Link, Wrong Information, Anime Opening Guess, Game Soundtrack Guess và Anime Video Guess.
-- Answer alias được chuẩn hóa chính xác: lowercase, bỏ dấu, dấu câu và khoảng trắng thừa; không fuzzy match rộng.
-- Session backend có hạn dùng, chặn submit/reward trùng và tính điểm theo số hint.
-- Fragment, collectible, collection progress và leaderboard dùng D1.
-- `RemoteMediaImage` tải ảnh trực tiếp từ URL nguồn, có skeleton, fallback, lazy-load, blur/crop và không lưu binary vào database.
-- AniList GraphQL và IGDB adapters chỉ chạy ở backend; kết quả search được cache ngắn hạn.
-- Audio/video player phát media nguyên gốc, preview 5–30 giây, giới hạn replay, khóa seek trước reveal, hỗ trợ visible/blurred/covered và không tách audio khỏi video.
-- Remote media, R2 upload/playback, temporary signed URL, attribution, license note, report/takedown và audit log.
+Project không còn phụ thuộc ChatGPT Sites, Cloudflare D1 hoặc R2.
 
-## Stack
+## Tính năng
 
-- Next.js 16, React 19, TypeScript strict, Tailwind CSS 4.
-- Cloudflare D1 + Drizzle ORM cho dữ liệu quan hệ.
-- Cloudflare R2 cho audio/video được cấp phép.
-- Sites/Vinext cho Cloudflare Worker runtime.
-- Zod cho input validation.
-- Sites/ChatGPT identity headers cho đăng nhập; authorization luôn được kiểm tra lại ở API.
+- Landing, Explore, Archive World, Play, Daily, Collection, Profile, Leaderboard và Admin responsive.
+- Hint Ladder, Cropped Memory, Character Trail, Asset Link, Wrong Information.
+- Anime Opening Guess, Game Soundtrack Guess và Anime Video Guess dùng chung media player.
+- Answer alias chuẩn hóa chính xác; không fuzzy match rộng.
+- Backend Railway xác minh session, hint, answer, score và reward.
+- PostgreSQL function cộng fragment/score và restore collectible trong transaction.
+- Supabase Auth cho đăng ký, đăng nhập và refresh token.
+- AniList GraphQL và IGDB adapters chỉ chạy ở backend.
+- Supabase Storage private bucket cho audio/video được cấp phép.
+- Preview media 5–30 giây, replay limit, blur/covered mode và reveal.
+- Attribution, license note, content report và audit log.
 
 ## Chạy local
 
@@ -35,38 +38,95 @@ copy .env.example .env.local
 npm run dev
 ```
 
-Frontend mặc định chạy ở `http://localhost:3000`. Local Next preview có thể xem toàn bộ demo UI. Các thao tác D1/R2 cần chạy qua Sites/Vinext local runtime:
+Mở terminal thứ hai:
 
 ```bash
-npm run db:seed
-npm run build:sites
+npm run dev:server
 ```
 
-## Migration và seed
+- Frontend: `http://localhost:3000`
+- Backend: `http://localhost:8787`
+- Health check: `http://localhost:8787/health`
 
-Schema Drizzle nằm tại `db/schema.ts`.
+## Supabase
+
+Tạo project Supabase, điền các biến server-only:
+
+```dotenv
+SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+DATABASE_URL=postgresql://...
+SUPABASE_MEDIA_BUCKET=licensed-media
+```
+
+Chạy migration:
 
 ```bash
-npm run db:generate
-npm run db:seed
+npm run migrate
 ```
 
-- `drizzle/0000_cuddly_vargas.sql`: 30 bảng, index, unique constraint và foreign key.
-- `drizzle/0001_demo_seed.sql`: 6 Archive World, collectible, challenge, daily set và user demo.
-- Khi schema thay đổi, tạo migration mới; không sửa migration đã áp dụng trên production.
+Migration [202607280001_anigame_archive.sql](supabase/migrations/202607280001_anigame_archive.sql) tạo schema, index, RLS, seed demo, private Storage bucket và các PostgreSQL function:
 
-## Kiểm tra
+- `award_challenge_reward`
+- `restore_collectible`
+
+Sau khi đăng ký tài khoản admin:
+
+```sql
+update public.profiles
+set role = 'admin'
+where id = (select id from auth.users where email = 'admin@example.com');
+```
+
+## Deploy frontend lên GitHub Pages
+
+Workflow [.github/workflows/deploy-pages.yml](.github/workflows/deploy-pages.yml) chạy khi push `main`.
+
+Nó sử dụng:
 
 ```bash
-npm run typecheck
-npm run lint
-npm test
-npm run build:sites
+npm ci
+npm run build:pages
 ```
 
-## API chính
+Static export nằm trong `out/`. Frontend production gọi:
 
-### Public/user
+```text
+https://luki-minigame-production.up.railway.app
+```
+
+qua biến `NEXT_PUBLIC_API_URL` trong workflow. Nếu Railway domain thay đổi, cập nhật biến này.
+
+## Deploy backend lên Railway
+
+Railway dùng [Dockerfile](Dockerfile) và [railway.json](railway.json).
+
+Các biến cần đặt trên Railway:
+
+```dotenv
+PORT=8787
+ALLOWED_ORIGINS=https://hoangkim0312.github.io
+SUPABASE_URL=...
+SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+SUPABASE_MEDIA_BUCKET=licensed-media
+IGDB_CLIENT_ID=...
+IGDB_ACCESS_TOKEN=...
+```
+
+Railway kiểm tra `/health`. Backend lắng nghe trên `0.0.0.0` và `PORT`.
+
+## API
+
+### Auth
+
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `POST /api/auth/refresh`
+- `GET /api/auth/me`
+
+### Gameplay
 
 - `GET /api/worlds`
 - `GET /api/worlds/:slug`
@@ -76,77 +136,41 @@ npm run build:sites
 - `POST /api/game-sessions/:id/open-hint`
 - `POST /api/game-sessions/:id/submit-answer`
 - `POST /api/collectibles/:id/restore`
-- `POST /api/report-content`
-- `GET /api/media-storage/:key?token=...`
 
-### Admin
+### Admin/media
 
-- `GET /api/media/search?source=anilist|igdb&q=...`
+- `GET /api/media/search`
 - `POST /api/admin/worlds/import`
 - `POST /api/admin/media-assets`
 - `POST /api/admin/media-assets/upload-url`
-- `PUT /api/media-storage/:key?token=...`
+- `POST /api/report-content`
 
-Mọi admin endpoint yêu cầu identity hợp lệ và email nằm trong `ADMIN_EMAILS`.
+Admin endpoints kiểm tra JWT Supabase và role từ PostgreSQL.
 
-## Media provider
+## Audio/video
 
-MVP hỗ trợ:
+- Remote media chỉ lưu URL và metadata.
+- Upload được gửi đến private Supabase Storage bucket bằng signed upload URL.
+- Không lưu file vào Railway filesystem.
+- Không rip, tách audio, chuyển MP4 thành MP3 hoặc download từ YouTube/Spotify.
+- Nếu không được phép full playback, reveal chỉ mở official source.
 
-- `remote_audio`
-- `remote_video`
-- `uploaded_audio`
-- `uploaded_video`
+## Kiểm tra
 
-Kiến trúc `MediaProviderAdapter` tách validation, capability, playback config và attribution khỏi UI. Remote URL phải là HTTPS public; localhost, loopback, link-local và private IP bị chặn để giảm SSRF.
+```bash
+npm run typecheck
+npm run lint
+npm test
+npm run build:pages
+```
 
-### Thêm remote audio/video
+## Biến môi trường
 
-Vào `/admin`, chọn **Media assets**, nhập URL, type, visual mode, preview start, duration 5/10/15/20/30 giây, attribution và license note. API lưu URL/metadata, không tải file về application server.
+Xem [.env.example](.env.example). Không đưa `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL` hoặc IGDB token vào biến `NEXT_PUBLIC_*`.
 
-### Object storage và signed playback
+## Giới hạn
 
-1. Client xin upload ticket tại `POST /api/admin/media-assets/upload-url`.
-2. Backend tạo object key UUID và URL tạm 10 phút.
-3. Client stream file vào R2; application không ghi file xuống local disk.
-4. Playback URL dùng HMAC token có expiry và mode (`preview` hoặc `revealed`).
-5. Preview mặc định hết hạn sau 5–10 phút; reveal nên dùng 30–60 phút.
-
-Đặt `MEDIA_SIGNING_SECRET` bằng chuỗi ngẫu nhiên mạnh. Không dùng filename chứa đáp án.
-
-### Full playback
-
-- `canPlayFullAfterReveal=true`: gỡ blur/crop/overlay, mở controls và seek đầy đủ.
-- `false`: chỉ replay preview nếu được phép và mở `officialSourceUrl`.
-- Provider bắt buộc visible player không được che branding.
-
-## Database
-
-30 bảng gồm:
-
-`users`, `user_profiles`, `media_sources`, `media_worlds`, `media_aliases`, `collectibles`, `collectible_variants`, `collection_sets`, `collection_set_items`, `user_fragments`, `user_collectibles`, `media_assets`, `challenges`, `challenge_hints`, `challenge_answers`, `challenge_options`, `game_sessions`, `game_session_hints`, `daily_challenges`, `daily_challenge_items`, `daily_results`, `leaderboard_entries`, `badges`, `titles`, `achievements`, `user_achievements`, `media_asset_reports`, `media_playback_sessions`, `media_provider_configs`, `audit_logs`.
-
-Unique constraint bảo vệ user collectible, fragment balance, daily result, leaderboard period và reward khỏi trùng lặp.
-
-## Bản quyền và takedown
-
-- Không rip, download, chuyển video thành MP3 hoặc lấy riêng audio stream từ YouTube/Spotify.
-- Demo audio là nguồn royalty-free SoundHelix; demo video là CC0 từ MDN và không đại diện nội dung anime/game thật.
-- Media thật chỉ được publish sau khi có license note, attribution và approval.
-- Report tạo record tại `media_asset_reports`. Admin có thể disable asset ngay; challenge mới không được bắt đầu nhưng lịch sử điểm hợp lệ vẫn được giữ.
-
-## Giới hạn hiện tại
-
-- IGDB cần token server-side và token phải được làm mới theo quy trình Twitch/IGDB.
-- Cache nguồn ngoài hiện dùng cache process ngắn hạn; production lớn nên nối Upstash Redis.
-- Upload URL tạm được ký tại application edge và stream thẳng vào R2 binding; nếu cần upload rất lớn, nên thay adapter bằng presigned S3-compatible R2 URL trực tiếp.
-- Demo chưa có creator workflow, trading, marketplace, realtime multiplayer, fingerprinting hay automatic copyright detection.
-- Media player HTML5 phụ thuộc CORS/range support của nguồn. Official embed cần adapter riêng theo điều khoản provider.
-
-## Roadmap
-
-1. Upstash cache + distributed rate limit.
-2. Official embed adapters (Vimeo/Mux/Cloudflare Stream) theo capability.
-3. Creator review workflow và moderation queue.
-4. Achievement rules, collection cosmetics và profile editor hoàn chỉnh.
-5. Integration tests chạy trên D1/R2 preview environment.
+- IGDB live search cần token hợp lệ từ Twitch/IGDB.
+- Rate limiting hiện áp dụng theo process Railway; production nhiều replica nên nối Upstash Redis.
+- Official embeds cần adapter riêng theo điều khoản từng provider.
+- Chưa có trading, marketplace, realtime multiplayer hoặc automatic copyright detection.

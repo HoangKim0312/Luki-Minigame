@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { useAuth } from "../auth-provider";
 
 const nav = [
   ["/explore", "Khám phá"],
@@ -15,6 +16,7 @@ const nav = [
 export function SiteShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const { session, status, signOut } = useAuth();
   return (
     <div className="archive-shell">
       <header className="site-header">
@@ -26,7 +28,14 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
           {nav.map(([href, label]) => <Link key={href} className={pathname === href ? "active" : ""} href={href} onClick={() => setMenuOpen(false)}>{label}</Link>)}
         </nav>
         <div className="header-actions">
-          <Link href="/profile/restorer">HK <span>Lv. 18</span></Link>
+          {status === "authenticated" && session ? (
+            <Link href="/profile/restorer" title="Mở profile">
+              {session.user.name.slice(0, 2).toUpperCase()} <span>{session.user.archiveScore ?? 0} pts</span>
+            </Link>
+          ) : (
+            <Link href="/login">Đăng nhập <span>Supabase</span></Link>
+          )}
+          {session && <button className="signout-button" type="button" onClick={signOut}>Thoát</button>}
           <button className="menu-toggle" type="button" onClick={() => setMenuOpen((value) => !value)} aria-expanded={menuOpen} aria-label="Mở menu">☰</button>
         </div>
       </header>
@@ -39,4 +48,3 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-
