@@ -1,10 +1,11 @@
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { challenges, collectibles, worlds } from "../lib/archive-data";
+import { challenges } from "../lib/archive-data";
 import { isAcceptedAnswer } from "../lib/answer";
 import { mediaProviderAdapters } from "../lib/media-providers";
 import { sourceAdapters } from "../lib/source-adapters";
+import { animeThemesAdapter } from "../lib/animethemes-adapter";
 import {
   createSignedUploadUrl,
   createSupabaseAccount,
@@ -24,6 +25,42 @@ const sourceCache = new Map<string, { expiresAt: number; data: unknown }>();
 
 type Identity = { id: string; email: string; name: string; role: "admin" | "user" | "creator" };
 type Json = Record<string, unknown> | unknown[];
+type WorldRow = {
+  id: string;
+  source: "anilist" | "igdb";
+  source_id: string;
+  type: "anime" | "game";
+  title: string;
+  slug: string;
+  alternative_titles: string[];
+  cover_image_url: string | null;
+  banner_image_url: string | null;
+  description: string | null;
+  genres: string[];
+  release_year: number | null;
+  status: string;
+};
+
+function publicWorld(row: WorldRow, collectibleCount = 0) {
+  return {
+    id: row.id,
+    sourceId: row.source_id,
+    slug: row.slug,
+    title: row.title,
+    alternativeTitles: row.alternative_titles,
+    type: row.type,
+    year: row.release_year ?? 0,
+    genres: row.genres,
+    cover: row.cover_image_url,
+    banner: row.banner_image_url,
+    description: row.description ?? "",
+    source: row.source,
+    progress: 0,
+    fragments: 0,
+    collectibleCount,
+    restoredCount: 0,
+  };
+}
 
 function cors(req: IncomingMessage, res: ServerResponse) {
   const origin = req.headers.origin;
@@ -158,12 +195,25 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
   const authResult = await authRoutes(req, res, pathname);
   if (authResult !== false) return;
 
-  if (pathname === "/api/worlds" && req.method === "GET") return json(res, 200, { worlds });
+  if (pathname === "/api/worlds" && req.method === "GET") {
+    const rows = await supabaseRest<WorldRow[]>("media_worlds?status=eq.published&select=id,source,source_id,type,title,slug,alternative_titles,cover_image_url,banner_image_url,description,genres,release_year,status&order=title.asc");
+    const counts = await supabaseRest<Array<{ world_id: string }>>("collectibles?status=eq.active&select=world_id");
+    const countByWorld = new Map<string, number>();
+    for (const item of counts) countByWorld.set(item.world_id, (countByWorld.get(item.world_id) ?? 0) + 1);
+    return json(res, 200, { worlds: rows.map((row) => publicWorld(row, countByWorld.get(row.id) ?? 0)) });
+  }
   if (pathname.startsWith("/api/worlds/") && req.method === "GET") {
     const slug = decodeURIComponent(pathname.slice("/api/worlds/".length));
-    const world = worlds.find((item) => item.slug === slug);
-    if (!world) return error(res, 404, "Archive World không tồn tại.", "WORLD_NOT_FOUND");
-    return json(res, 200, { world, collectibles: collectibles.filter((item) => item.worldId === world.id), challenges: challenges.filter((item) => item.worldId === world.id).map((item) => ({ id: item.id, mode: item.mode, label: item.label, prompt: item.prompt })) });
+    const rows = await supabaseRest<WorldRow[]>(`media_worlds?slug=eq.${encodeURIComponent(slug)}&status=eq.published&select=id,source,source_id,type,title,slug,alternative_titles,cover_image_url,banner_image_url,description,genres,release_year,status&limit=1`);
+    const row = rows[0];
+    if (!row) return error(res, 404, "Archive World không tồn tại.", "WORLD_NOT_FOUND");
+    const worldCollectibles = await supabaseRest<Array<{ id: string; world_id: string; name: string; type: string; rarity: string; fragment_requirement: number; remote_image_url: string | null }>>(`collectibles?world_id=eq.${encodeURIComponent(row.id)}&status=eq.active&select=id,world_id,name,type,rarity,fragment_requirement,remote_image_url&order=name.asc`);
+    const worldChallenges = await supabaseRest<Array<{ id: string; game_mode: string; prompt: string }>>(`challenges?world_id=eq.${encodeURIComponent(row.id)}&status=eq.active&select=id,game_mode,prompt&order=created_at.asc`);
+    return json(res, 200, {
+      world: publicWorld(row, worldCollectibles.length),
+      collectibles: worldCollectibles.map((item) => ({ id: item.id, worldId: item.world_id, name: item.name, type: item.type, rarity: item.rarity, cost: item.fragment_requirement, unlocked: false, image: item.remote_image_url })),
+      challenges: worldChallenges.map((item) => ({ id: item.id, mode: item.game_mode, label: item.game_mode, prompt: item.prompt })),
+    });
   }
   if (pathname === "/api/daily" && req.method === "GET") {
     const date = new Date().toISOString().slice(0, 10);
@@ -251,11 +301,128 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     if (!admin) return;
     const input = z.object({ source: z.enum(["anilist", "igdb"]), sourceId: z.string().min(1), status: z.enum(["draft", "published"]).default("draft") }).parse(await body(req));
     const item = await sourceAdapters[input.source].getMediaDetails(input.sourceId);
+    const existing = await supabaseRest<Array<{ id: string }>>(`media_worlds?source=eq.${input.source}&source_id=eq.${encodeURIComponent(input.sourceId)}&select=id&limit=1`);
     const slug = item.title.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-    const record = { id: randomUUID(), source: item.source, source_id: item.sourceId, type: item.type, title: item.title, slug, alternative_titles: item.alternativeTitles, cover_image_url: item.coverImageUrl, banner_image_url: item.bannerImageUrl, description: item.description, genres: item.genres, release_year: item.releaseYear, attribution: item.attribution, license_note: "Remote metadata imported under source API terms.", metadata: item.metadata, status: input.status };
+    const record = { id: existing[0]?.id ?? randomUUID(), source: item.source, source_id: item.sourceId, type: item.type, title: item.title, slug, alternative_titles: item.alternativeTitles, cover_image_url: item.coverImageUrl, banner_image_url: item.bannerImageUrl, description: item.description, genres: item.genres, release_year: item.releaseYear, attribution: item.attribution, license_note: "Remote metadata imported under source API terms.", metadata: item.metadata, status: input.status };
     await supabaseRest("media_worlds?on_conflict=source,source_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(record) });
+    if (input.source === "anilist") {
+      const characters = await sourceAdapters.anilist.getCharacters(input.sourceId);
+      if (characters.length) {
+        const characterRows = characters.map((character) => ({
+          id: `anilist-character-${character.sourceId}`,
+          world_id: record.id,
+          name: character.name,
+          slug: character.name.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""),
+          type: "character",
+          remote_image_url: character.remoteImageUrl,
+          source: "anilist",
+          source_id: character.sourceId,
+          rarity: "common",
+          fragment_requirement: 3,
+          status: "active",
+        }));
+        await supabaseRest("collectibles?on_conflict=world_id,slug", {
+          method: "POST",
+          headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+          body: JSON.stringify(characterRows),
+        });
+      }
+    }
     await supabaseRest("audit_logs", { method: "POST", body: JSON.stringify({ actor_user_id: admin.id, action: "import", entity_type: "media_world", entity_id: record.id, metadata: { source: item.source, sourceId: item.sourceId } }) });
     return json(res, 201, { world: record });
+  }
+
+  if (pathname === "/api/admin/animethemes/search" && req.method === "GET") {
+    if (!await requireAdmin(req, res)) return;
+    const query = z.string().trim().min(2).max(100).parse(url.searchParams.get("q"));
+    const cacheKey = `animethemes:${query.toLowerCase()}`;
+    const cached = sourceCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return json(res, 200, { results: cached.data, cached: true });
+    const results = await animeThemesAdapter.searchThemes(query);
+    sourceCache.set(cacheKey, { expiresAt: Date.now() + 6 * 60 * 60_000, data: results });
+    return json(res, 200, { results, cached: false });
+  }
+
+  if (pathname === "/api/admin/animethemes/import" && req.method === "POST") {
+    const admin = await requireAdmin(req, res);
+    if (!admin) return;
+    const input = z.object({
+      worldId: z.string().min(1),
+      animeSlug: z.string().min(1),
+      themeId: z.number().int().positive(),
+      previewDurationSeconds: z.number().int().min(5).max(30).default(30),
+    }).parse(await body(req));
+    const targetWorlds = await supabaseRest<Array<{ id: string; title: string; type: "anime" | "game"; alternative_titles: string[]; release_year: number | null }>>(`media_worlds?id=eq.${encodeURIComponent(input.worldId)}&select=id,title,type,alternative_titles,release_year&limit=1`);
+    const targetWorld = targetWorlds[0];
+    if (!targetWorld || targetWorld.type !== "anime") return error(res, 422, "AnimeThemes chỉ có thể gắn với Anime World.", "MEDIA_WORLD_MISMATCH");
+    const themes = await animeThemesAdapter.getAnimeThemes(input.animeSlug);
+    const theme = themes.find((item) => item.themeId === input.themeId);
+    if (!theme) return error(res, 404, "Không tìm thấy theme trên AnimeThemes.", "THEME_NOT_FOUND");
+    const validMapping = await animeThemesAdapter.findThemesForWorld({ title: targetWorld.title, alternativeTitles: targetWorld.alternative_titles, year: targetWorld.release_year });
+    if (!validMapping.some((item) => item.themeId === theme.themeId)) return error(res, 422, "Theme không khớp tên/năm của Archive World.", "THEME_WORLD_MISMATCH");
+    if (theme.nsfw || theme.spoiler) return error(res, 422, "Theme NSFW/spoiler cần được review thủ công.", "THEME_REQUIRES_REVIEW");
+
+    const existingAssets = await supabaseRest<Array<{ id: string }>>(`media_assets?provider=eq.animethemes&source_url=eq.${encodeURIComponent(theme.playbackUrl)}&select=id&limit=1`);
+    const mediaAssetId = existingAssets[0]?.id ?? randomUUID();
+    const mediaCategory = theme.themeType === "OP" ? "anime_opening" : "anime_ending";
+    await supabaseRest("media_assets?on_conflict=id", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify({
+        id: mediaAssetId,
+        media_world_id: targetWorld.id,
+        media_type: "video",
+        source_type: "remote_video",
+        provider: "animethemes",
+        source_url: theme.playbackUrl,
+        playback_url: theme.playbackUrl,
+        title: theme.songTitle,
+        artist: theme.artists.join(", ") || "Unknown artist",
+        anime_name: targetWorld.title,
+        media_category: mediaCategory,
+        preview_start_seconds: 0,
+        preview_duration_seconds: input.previewDurationSeconds,
+        can_preview: true,
+        can_play_full_after_reveal: true,
+        requires_external_full_playback: false,
+        requires_visible_player: false,
+        max_preview_seconds: 30,
+        license_type: "provider-api",
+        license_note: "Remote video is streamed directly from AnimeThemes.moe using the media link returned by its public API. No download, ripping, transcoding or audio extraction is performed.",
+        copyright_owner: "Respective rights holders",
+        attribution_text: theme.attribution,
+        official_source_url: theme.officialSourceUrl,
+        uploaded_by: admin.id,
+        approved_by: admin.id,
+        approval_status: "approved",
+        status: "active",
+        metadata: { animeThemesAnimeId: theme.animeId, animeThemesThemeId: theme.themeId, animeThemesVideoId: theme.videoId, themeType: theme.themeType, sequence: theme.sequence, episodes: theme.episodes, basename: theme.basename },
+      }),
+    });
+
+    const challengeId = `animethemes-${theme.themeId}`;
+    await supabaseRest("challenges?on_conflict=id", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify({
+        id: challengeId,
+        world_id: targetWorld.id,
+        media_asset_id: mediaAssetId,
+        game_mode: theme.themeType === "OP" ? "anime_opening_guess" : "anime_ending_guess",
+        prompt: `Đoán anime từ ${theme.themeType === "OP" ? "opening" : "ending"} này.`,
+        answer_type: "anime",
+        correct_answer: targetWorld.title,
+        visual_mode: "covered",
+        max_replays: 1,
+        time_limit_seconds: 35,
+        status: "active",
+      }),
+    });
+    const answers = [targetWorld.title, ...targetWorld.alternative_titles].map((answer) => ({ challenge_id: challengeId, answer, normalized_answer: answer.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim() }));
+    await supabaseRest(`challenge_answers?challenge_id=eq.${encodeURIComponent(challengeId)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+    await supabaseRest("challenge_answers", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify(answers) });
+    await supabaseRest("audit_logs", { method: "POST", body: JSON.stringify({ actor_user_id: admin.id, action: "import_animetheme", entity_type: "challenge", entity_id: challengeId, metadata: { provider: "animethemes", themeId: theme.themeId, videoId: theme.videoId } }) });
+    return json(res, 201, { challengeId, mediaAssetId, theme });
   }
 
   if (pathname === "/api/admin/media-assets/upload-url" && req.method === "POST") {
@@ -271,12 +438,32 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
   if (pathname === "/api/admin/media-assets" && req.method === "POST") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const input = z.object({ mediaType: z.enum(["audio", "video"]), sourceType: z.enum(["remote_audio", "remote_video", "uploaded_audio", "uploaded_video"]), sourceUrl: z.string().url(), title: z.string().min(1), mediaCategory: z.string().min(1), previewStartSeconds: z.number().min(0).default(0), previewDurationSeconds: z.number().min(5).max(30), canPlayFullAfterReveal: z.boolean().default(false), licenseType: z.string().min(2), licenseNote: z.string().min(5), attributionText: z.string().min(2), officialSourceUrl: z.string().url() }).parse(await body(req));
+    const input = z.object({
+      worldId: z.string().min(1),
+      mediaType: z.enum(["audio", "video"]),
+      sourceType: z.enum(["remote_audio", "remote_video", "uploaded_audio", "uploaded_video"]),
+      sourceUrl: z.string().url(),
+      title: z.string().trim().min(1),
+      artist: z.string().trim().min(1),
+      mediaCategory: z.enum(["anime_opening", "anime_ending", "anime_insert_song", "anime_scene", "game_opening", "game_soundtrack", "game_boss_theme", "game_trailer", "game_cutscene", "character_theme", "other"]),
+      previewStartSeconds: z.number().min(0).default(0),
+      previewDurationSeconds: z.number().min(5).max(30),
+      canPlayFullAfterReveal: z.boolean().default(false),
+      licenseType: z.string().min(2),
+      licenseNote: z.string().min(5),
+      attributionText: z.string().min(2),
+      officialSourceUrl: z.string().url(),
+    }).parse(await body(req));
+    const targetWorlds = await supabaseRest<Array<{ id: string; title: string; type: "anime" | "game"; status: string }>>(`media_worlds?id=eq.${encodeURIComponent(input.worldId)}&select=id,title,type,status&limit=1`);
+    const targetWorld = targetWorlds[0];
+    if (!targetWorld) return error(res, 422, "Archive World không tồn tại.", "WORLD_NOT_FOUND");
+    if (input.mediaCategory.startsWith("anime_") && targetWorld.type !== "anime") return error(res, 422, "Anime media phải gắn với Anime World.", "MEDIA_WORLD_MISMATCH");
+    if (input.mediaCategory.startsWith("game_") && targetWorld.type !== "game") return error(res, 422, "Game media phải gắn với Game World.", "MEDIA_WORLD_MISMATCH");
     const adapter = mediaProviderAdapters[input.sourceType];
     const validation = await adapter.validateSource(input.sourceUrl);
     if (!validation.valid) return error(res, 422, validation.reason || "URL không an toàn.", "UNSAFE_REMOTE_URL");
     const id = randomUUID();
-    await supabaseRest("media_assets", { method: "POST", body: JSON.stringify({ id, media_type: input.mediaType, source_type: input.sourceType, provider: adapter.providerName, source_url: input.sourceUrl, playback_url: input.sourceUrl, title: input.title, media_category: input.mediaCategory, preview_start_seconds: input.previewStartSeconds, preview_duration_seconds: input.previewDurationSeconds, can_preview: true, can_play_full_after_reveal: input.canPlayFullAfterReveal, requires_external_full_playback: !input.canPlayFullAfterReveal, max_preview_seconds: 30, license_type: input.licenseType, license_note: input.licenseNote, attribution_text: input.attributionText, official_source_url: input.officialSourceUrl, uploaded_by: admin.id, approval_status: "needs_review", status: "draft" }) });
+    await supabaseRest("media_assets", { method: "POST", body: JSON.stringify({ id, media_world_id: targetWorld.id, media_type: input.mediaType, source_type: input.sourceType, provider: adapter.providerName, source_url: input.sourceUrl, playback_url: input.sourceUrl, title: input.title, artist: input.artist, anime_name: targetWorld.type === "anime" ? targetWorld.title : null, game_name: targetWorld.type === "game" ? targetWorld.title : null, media_category: input.mediaCategory, preview_start_seconds: input.previewStartSeconds, preview_duration_seconds: input.previewDurationSeconds, can_preview: true, can_play_full_after_reveal: input.canPlayFullAfterReveal, requires_external_full_playback: !input.canPlayFullAfterReveal, max_preview_seconds: 30, license_type: input.licenseType, license_note: input.licenseNote, attribution_text: input.attributionText, official_source_url: input.officialSourceUrl, uploaded_by: admin.id, approval_status: "needs_review", status: "draft" }) });
     return json(res, 201, { asset: { id, ...input } });
   }
 

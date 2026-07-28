@@ -23,7 +23,7 @@ Project không còn phụ thuộc ChatGPT Sites, Cloudflare D1 hoặc R2.
 - Backend Railway xác minh session, hint, answer, score và reward.
 - PostgreSQL function cộng fragment/score và restore collectible trong transaction.
 - Supabase Auth cho đăng ký, đăng nhập và refresh token.
-- AniList GraphQL và IGDB adapters chỉ chạy ở backend.
+- AniList GraphQL, IGDB và AnimeThemes adapters chỉ chạy ở backend.
 - Supabase Storage private bucket cho audio/video được cấp phép.
 - Preview media 5–30 giây, replay limit, blur/covered mode và reveal.
 - Attribution, license note, content report và audit log.
@@ -153,6 +153,9 @@ Admin endpoints kiểm tra JWT Supabase và role từ PostgreSQL.
 - Upload được gửi đến private Supabase Storage bucket bằng signed upload URL.
 - Không lưu file vào Railway filesystem.
 - Không rip, tách audio, chuyển MP4 thành MP3 hoặc download từ YouTube/Spotify.
+- Opening/ending được ánh xạ qua AnimeThemes theo tên/alternative title và năm phát hành. Video WebM được stream nguyên bản từ URL do API trả về; không tách audio.
+- Admin dùng tab `AnimeThemes` để tìm OP/ED, chọn đúng Archive World và import.
+- Backend từ chối mapping sai anime/năm; database chỉ cho media challenge hoạt động khi asset cùng World, đúng category, đã approved và có attribution/official source.
 - Nếu không được phép full playback, reveal chỉ mở official source.
 
 ## Kiểm tra

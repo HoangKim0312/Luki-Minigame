@@ -43,3 +43,16 @@ test("Supabase migration provides atomic reward and restore functions", async ()
   assert.match(migration, /create or replace function public\.restore_collectible/);
   assert.match(migration, /for update/);
 });
+
+test("production demo never substitutes unrelated audio or video for an anime theme", async () => {
+  const data = await readFile(new URL("../lib/archive-data.ts", import.meta.url), "utf8");
+  const adapter = await readFile(new URL("../lib/animethemes-adapter.ts", import.meta.url), "utf8");
+  const cleanup = await readFile(new URL("../supabase/migrations/202607280003_remove_fake_content.sql", import.meta.url), "utf8");
+  assert.doesNotMatch(data, /SoundHelix|flower\.mp4|Demo royalty-free audio/);
+  assert.match(data, /Guren no Yumiya/);
+  assert.match(data, /ShingekiNoKyojin-OP1\.webm/);
+  assert.match(adapter, /api\.animethemes\.moe/);
+  assert.match(adapter, /themeType: theme\.type/);
+  assert.match(cleanup, /validate_media_challenge_activation/);
+  assert.match(cleanup, /approval_status <> 'approved'/);
+});

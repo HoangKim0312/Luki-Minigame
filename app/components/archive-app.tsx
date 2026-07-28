@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
-import { challenges, collectibles, leaderboard, modes, worlds } from "@/lib/archive-data";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { challenges, collectibles, leaderboard, modes, worlds, type Collectible, type World } from "@/lib/archive-data";
 import { isAcceptedAnswer } from "@/lib/answer";
 import { GuessMediaPlayer } from "./guess-media-player";
 import { RemoteMediaImage } from "./remote-media-image";
@@ -52,13 +52,13 @@ function HomeView() {
             <Link className="button primary" href="/play">Bắt đầu phục hồi <span>→</span></Link>
             <Link className="button ghost" href="/explore">Khám phá Archive</Link>
           </div>
-          <div className="hero-stats"><span><b>06</b> Archive Worlds</span><span><b>118</b> Collectibles</span><span><b>08</b> Game modes</span></div>
+          <div className="hero-stats"><span><b>{worlds.length}</b> nguồn đã xác minh</span><span><b>LIVE</b> dữ liệu Supabase</span><span><b>05</b> game mode khả dụng</span></div>
         </div>
         <div className="hero-visual">
           <div className="archive-ring ring-one" /><div className="archive-ring ring-two" />
           <div className="memory-card main-memory">
             <RemoteMediaImage src={worlds[1].cover} alt={worlds[1].title} />
-            <div><small>ARCHIVE · GAME.017</small><strong>Android Requiem</strong><span>42% restored</span></div>
+            <div><small>IGDB · GAME</small><strong>{worlds[1].title}</strong><span>Dữ liệu nguồn đã xác minh</span></div>
           </div>
           <div className="memory-card mini-memory one"><span>✦</span><b>+3</b><small>FRAGMENTS</small></div>
           <div className="memory-card mini-memory two"><span>◆</span><b>RARE</b><small>NEW SIGNAL</small></div>
@@ -66,7 +66,7 @@ function HomeView() {
       </section>
 
       <section className="ticker" aria-label="Trạng thái hệ thống">
-        <span>LIVE ARCHIVE</span><p>Daily challenge đang mở</p><i /> <p>3,481 restorers online</p><i /> <p>Remote sources healthy</p>
+        <span>LIVE ARCHIVE</span><p>Catalog đồng bộ qua Railway</p><i /> <p>Không hiển thị số người chơi giả</p><i /> <p>Media phải được kiểm duyệt</p>
       </section>
 
       <section className="page-section">
@@ -106,7 +106,14 @@ function HomeView() {
 function ExploreView() {
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
-  const filtered = worlds.filter((world) => (filter === "all" || world.type === filter) && world.title.toLowerCase().includes(query.toLowerCase()));
+  const [catalog, setCatalog] = useState<World[]>(worlds);
+  const [catalogError, setCatalogError] = useState("");
+  useEffect(() => {
+    void authApi<{ worlds: World[] }>("/api/worlds")
+      .then((payload) => setCatalog(payload.worlds))
+      .catch(() => setCatalogError("Không thể đồng bộ catalog lúc này; đang hiển thị dữ liệu nguồn đã xác minh gần nhất."));
+  }, []);
+  const filtered = catalog.filter((world) => (filter === "all" || world.type === filter) && [world.title, ...world.alternativeTitles].some((title) => title.toLowerCase().includes(query.toLowerCase())));
   return (
     <section className="page-section top-section">
       <div className="page-intro"><p className="kicker"><span /> Archive directory</p><h1>Khám phá<br /><em>Archive Worlds</em></h1><p>Mỗi thế giới là một album ký ức có thử thách, collectible và phần thưởng riêng.</p></div>
@@ -114,6 +121,7 @@ function ExploreView() {
         <div>{["all", "anime", "game"].map((item) => <button key={item} className={filter === item ? "active" : ""} onClick={() => setFilter(item)}>{item === "all" ? "Tất cả" : item}</button>)}</div>
         <label><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm Archive World..." /></label>
       </div>
+      {catalogError && <p className="admin-notice">{catalogError}</p>}
       {filtered.length ? <div className="explore-grid">{filtered.map((world) => <WorldCard key={world.id} world={world} />)}</div> : <div className="empty-state"><span>⌁</span><h2>Không tìm thấy tín hiệu</h2><p>Thử một từ khóa hoặc bộ lọc khác.</p></div>}
     </section>
   );
@@ -124,7 +132,13 @@ function PlayView() {
     <section className="page-section top-section">
       <div className="page-intro split"><div><p className="kicker"><span /> Challenge terminal</p><h1>Chọn cách<br /><em>giải mã ký ức</em></h1></div><p>Tất cả game mode dùng chung engine session. Answer, timer, hint và reward được xác minh phía backend.</p></div>
       <div className="mode-grid">{modes.map((mode, index) => {
-        const challenge = challenges.find((item) => item.mode === mode.id) ?? challenges[0];
+        const challenge = challenges.find((item) => item.mode === mode.id);
+        if (!mode.available || !challenge) {
+          return <article className="mode-card unavailable" key={mode.id}>
+            <div className="mode-number">{mode.icon}</div><span className="mode-symbol">⌁</span>
+            <h2>{mode.label}</h2><p>{mode.description}</p><footer><small>{mode.reward}</small><b>CHƯA PHÁT HÀNH</b></footer>
+          </article>;
+        }
         return <Link href={`/play/${challenge.id}`} className="mode-card" key={mode.id}>
           <div className="mode-number">{mode.icon}</div><span className="mode-symbol">{["⌁", "◩", "⌖", "◇", "≠", "◖", "▣"][index]}</span>
           <h2>{mode.label}</h2><p>{mode.description}</p><footer><small>{mode.reward}</small><b>Chơi ngay →</b></footer>
@@ -243,12 +257,13 @@ function DailyView() {
 
 function CollectionView() {
   const { status } = useAuth();
-  const [selected, setSelected] = useState(collectibles[0]);
+  const [selected, setSelected] = useState<(typeof collectibles)[number] | null>(collectibles[0] ?? null);
   const [restored, setRestored] = useState<string[]>(collectibles.filter((item) => item.unlocked).map((item) => item.id));
   const [restoreError, setRestoreError] = useState("");
   const [restoring, setRestoring] = useState(false);
-  const isRestored = restored.includes(selected.id);
+  const isRestored = selected ? restored.includes(selected.id) : false;
   const restore = async () => {
+    if (!selected) return;
     setRestoreError("");
     if (status !== "authenticated") {
       setRestoreError("Đăng nhập để lưu collectible vào Supabase.");
@@ -266,11 +281,12 @@ function CollectionView() {
   };
   return (
     <section className="page-section top-section">
-      <div className="page-intro split"><div><p className="kicker"><span /> Personal vault</p><h1>Collection<br /><em>của bạn</em></h1></div><div className="collection-summary"><span><b>{restored.length}</b> / {collectibles.length} restored</span><i><b style={{ width: `${restored.length / collectibles.length * 100}%` }} /></i><small>◆ 12 fragments khả dụng</small></div></div>
-      <div className="collection-layout">
-        <div className="collectible-grid">{collectibles.map((item) => <button key={item.id} onClick={() => setSelected(item)} className={`${selected.id === item.id ? "selected" : ""} ${restored.includes(item.id) ? "" : "locked"}`}><RemoteMediaImage src={item.image} alt={item.name} /><span className={`rarity ${item.rarity}`}>{item.rarity}</span><div><small>{item.type}</small><b>{restored.includes(item.id) ? item.name : "Unknown memory"}</b></div></button>)}</div>
-        <aside className="collectible-detail"><RemoteMediaImage src={selected.image} alt={selected.name} /><span className={`rarity ${selected.rarity}`}>{selected.rarity}</span><small>{selected.type}</small><h2>{isRestored ? selected.name : "Dữ liệu bị khóa"}</h2><p>{isRestored ? "Một ký ức đã được phục hồi và lưu an toàn trong Archive cá nhân." : "Dùng fragment cùng Archive World để khôi phục collectible này."}</p><div className="detail-cost"><span>Cần để restore</span><b>◆ {selected.cost} fragments</b></div>{restoreError && <p className="admin-notice">{restoreError}</p>}<button className="button primary" disabled={isRestored || selected.cost > 12 || restoring} onClick={() => void restore()}>{isRestored ? "Đã phục hồi" : restoring ? "Đang restore..." : "Restore collectible"}</button></aside>
-      </div>
+      <div className="page-intro split"><div><p className="kicker"><span /> Personal vault</p><h1>Collection<br /><em>của bạn</em></h1></div><div className="collection-summary"><span><b>{restored.length}</b> / {collectibles.length} restored</span><i><b style={{ width: `${collectibles.length ? restored.length / collectibles.length * 100 : 0}%` }} /></i><small>Dữ liệu thật từ Supabase</small></div></div>
+      {!selected ? <div className="empty-state"><span>⌁</span><h2>Chưa có collectible đã xác minh</h2><p>Collectible sẽ xuất hiện sau khi được đồng bộ từ AniList hoặc được admin duyệt. Website không còn dùng item và hình ảnh giả để lấp chỗ trống.</p></div> :
+        <div className="collection-layout">
+          <div className="collectible-grid">{collectibles.map((item) => <button key={item.id} onClick={() => setSelected(item)} className={`${selected.id === item.id ? "selected" : ""} ${restored.includes(item.id) ? "" : "locked"}`}><RemoteMediaImage src={item.image} alt={item.name} /><span className={`rarity ${item.rarity}`}>{item.rarity}</span><div><small>{item.type}</small><b>{restored.includes(item.id) ? item.name : "Unknown memory"}</b></div></button>)}</div>
+          <aside className="collectible-detail"><RemoteMediaImage src={selected.image} alt={selected.name} /><span className={`rarity ${selected.rarity}`}>{selected.rarity}</span><small>{selected.type}</small><h2>{isRestored ? selected.name : "Dữ liệu bị khóa"}</h2><p>{isRestored ? "Một ký ức đã được phục hồi và lưu an toàn trong Archive cá nhân." : "Dùng fragment cùng Archive World để khôi phục collectible này."}</p><div className="detail-cost"><span>Cần để restore</span><b>◆ {selected.cost} fragments</b></div>{restoreError && <p className="admin-notice">{restoreError}</p>}<button className="button primary" disabled={isRestored || selected.cost > 12 || restoring} onClick={() => void restore()}>{isRestored ? "Đã phục hồi" : restoring ? "Đang restore..." : "Restore collectible"}</button></aside>
+        </div>}
     </section>
   );
 }
@@ -281,32 +297,47 @@ function LeaderboardView() {
     <section className="page-section top-section">
       <div className="page-intro"><p className="kicker"><span /> Global signal</p><h1>Top<br /><em>Restorers</em></h1><p>Điểm chỉ xuất hiện sau khi challenge session được xác minh phía máy chủ.</p></div>
       <div className="period-tabs">{["Daily", "Weekly", "Monthly", "All time"].map((item) => <button className={period === item ? "active" : ""} onClick={() => setPeriod(item)} key={item}>{item}</button>)}</div>
-      <div className="podium">{leaderboard.slice(0, 3).map((player) => <div className={`rank-${player.rank}`} key={player.name}><span>0{player.rank}</span><div className="avatar-code">{player.name.slice(0, 2).toUpperCase()}</div><h3>{player.name}</h3><small>{player.title}</small><strong>{player.score.toLocaleString()} <i>PTS</i></strong></div>)}</div>
-      <div className="leader-list">{leaderboard.map((player) => <div key={player.name}><b>#{String(player.rank).padStart(2, "0")}</b><span className="avatar-code small">{player.name.slice(0, 2).toUpperCase()}</span><p><strong>{player.name}</strong><small>{player.title}</small></p><span>🔥 {player.streak} ngày</span><em>{player.score.toLocaleString()} pts</em></div>)}</div>
+      {leaderboard.length ? <><div className="podium">{leaderboard.slice(0, 3).map((player) => <div className={`rank-${player.rank}`} key={player.name}><span>0{player.rank}</span><div className="avatar-code">{player.name.slice(0, 2).toUpperCase()}</div><h3>{player.name}</h3><small>{player.title}</small><strong>{player.score.toLocaleString()} <i>PTS</i></strong></div>)}</div>
+      <div className="leader-list">{leaderboard.map((player) => <div key={player.name}><b>#{String(player.rank).padStart(2, "0")}</b><span className="avatar-code small">{player.name.slice(0, 2).toUpperCase()}</span><p><strong>{player.name}</strong><small>{player.title}</small></p><span>🔥 {player.streak} ngày</span><em>{player.score.toLocaleString()} pts</em></div>)}</div></> :
+      <div className="empty-state"><span>⌁</span><h2>Chưa có kết quả thật</h2><p>Bảng xếp hạng chỉ hiển thị điểm do backend xác minh; tài khoản và điểm demo đã được gỡ bỏ.</p></div>}
     </section>
   );
 }
 
 function ProfileView() {
+  const { session, status } = useAuth();
+  const user = session?.user;
   return (
     <section className="profile-page">
-      <div className="profile-banner"><div className="profile-sigil">HK</div><div><p className="kicker"><span /> Verified restorer</p><h1>hoangkim.archive</h1><span className="profile-title">PERFECT ARCHIVIST</span></div><button className="button ghost">Chỉnh profile</button></div>
+      <div className="profile-banner"><div className="profile-sigil">{user?.name.slice(0, 2).toUpperCase() ?? "?"}</div><div><p className="kicker"><span /> {status === "authenticated" ? "Verified restorer" : "Guest"}</p><h1>{user?.name ?? "Chưa đăng nhập"}</h1><span className="profile-title">DỮ LIỆU TỪ SUPABASE</span></div><button className="button ghost">Chỉnh profile</button></div>
       <div className="page-section profile-content">
-        <div className="profile-stats">{[["18", "Level"], ["4,280", "Archive score"], ["56", "Collectibles"], ["12", "Daily streak"]].map(([value, label]) => <div key={label}><strong>{value}</strong><span>{label}</span></div>)}</div>
-        <div className="profile-columns"><div><SectionHeading kicker="Showcase" title="Ký ức yêu thích" /><div className="showcase-grid">{collectibles.slice(0, 3).map((item) => <div key={item.id}><RemoteMediaImage src={item.image} alt={item.name} /><span className={`rarity ${item.rarity}`}>{item.rarity}</span><b>{item.name}</b></div>)}</div></div><aside><SectionHeading kicker="Recent signal" title="Hoạt động" />{["Phục hồi YoRHa Unit 2B", "Hoàn tất Daily Challenge", "Đạt streak 12 ngày", "Mở badge Signal Hunter"].map((item, index) => <p key={item}><span>✦</span><b>{item}</b><small>{index + 1} giờ trước</small></p>)}</aside></div>
+        <div className="profile-stats">{[["—", "Level"], [String(user?.archiveScore ?? 0), "Archive score"], ["0", "Collectibles"], [String(user?.streak ?? 0), "Daily streak"]].map(([value, label]) => <div key={label}><strong>{value}</strong><span>{label}</span></div>)}</div>
+        <div className="empty-state"><span>⌁</span><h2>Chưa có hoạt động được xác minh</h2><p>Showcase và lịch sử sẽ chỉ hiển thị dữ liệu thực của tài khoản.</p></div>
       </div>
     </section>
   );
 }
 
 function WorldView({ slug }: { slug?: string }) {
-  const world = worlds.find((item) => item.slug === slug) ?? worlds[0];
-  const items = collectibles.filter((item) => item.worldId === world.id);
+  const fallbackWorld = worlds.find((item) => item.slug === slug) ?? worlds[0];
+  const [world, setWorld] = useState<World>(fallbackWorld);
+  const [items, setItems] = useState<Collectible[]>([]);
+  const [loadError, setLoadError] = useState("");
+  useEffect(() => {
+    if (!slug) return;
+    void authApi<{ world: World; collectibles: Collectible[] }>(`/api/worlds/${encodeURIComponent(slug)}`)
+      .then((payload) => {
+        setWorld(payload.world);
+        setItems(payload.collectibles);
+      })
+      .catch(() => setLoadError("Không thể tải dữ liệu World từ Supabase."));
+  }, [slug]);
   return (
     <>
       <section className="world-hero"><RemoteMediaImage src={world.banner} alt={world.title} /><span className="world-hero-shade" /><div><p className="kicker"><span /> {world.source} · {world.type}</p><h1>{world.title}</h1><p>{world.description}</p><div className="tag-row">{world.genres.map((genre) => <span key={genre}>{genre}</span>)}<span>{world.year}</span></div></div></section>
       <section className="page-section world-content"><div className="world-overview"><div><small>ALBUM PROGRESS</small><strong>{world.progress}%</strong><i><b style={{ width: `${world.progress}%` }} /></i></div><div><small>RESTORED</small><strong>{world.restoredCount} / {world.collectibleCount}</strong></div><div><small>FRAGMENTS</small><strong>◆ {world.fragments}</strong></div><Link className="button primary" href="/play">Chơi challenge →</Link></div>
       <SectionHeading kicker="World collection" title="Dữ liệu có thể phục hồi" />
+      {loadError && <p className="admin-notice">{loadError}</p>}
       {items.length ? <div className="showcase-grid">{items.map((item) => <div key={item.id}><RemoteMediaImage src={item.image} alt={item.name} /><span className={`rarity ${item.rarity}`}>{item.rarity}</span><b>{item.name}</b></div>)}</div> : <div className="empty-state"><span>⌁</span><h2>Archive chưa đồng bộ collectible</h2><p>Admin có thể thêm dữ liệu tại Media Manager.</p></div>}</section>
     </>
   );
@@ -341,24 +372,56 @@ function AdminView() {
   };
   return (
     <section className="admin-page">
-      <aside><p className="brand"><span className="brand-mark">A</span><span>ARCHIVE<br /><b>CONTROL</b></span></p><nav>{["Overview", "Import", "Worlds", "Collectibles", "Challenges", "Daily", "Media assets", "Reports", "Audit log"].map((item) => <button className={tab === item ? "active" : ""} onClick={() => setTab(item)} key={item}>{item}</button>)}</nav><Link href="/">← Về website</Link></aside>
+      <aside><p className="brand"><span className="brand-mark">A</span><span>ARCHIVE<br /><b>CONTROL</b></span></p><nav>{["Overview", "Import", "Worlds", "Collectibles", "Challenges", "Daily", "AnimeThemes", "Media assets", "Reports", "Audit log"].map((item) => <button className={tab === item ? "active" : ""} onClick={() => setTab(item)} key={item}>{item}</button>)}</nav><Link href="/">← Về website</Link></aside>
       <div className="admin-content">
         <header><div><small>ADMIN DASHBOARD</small><h1>{tab}</h1></div><span>HK · Administrator</span></header>
         {tab === "Import" ? <div className="admin-grid">
           <section className="admin-panel wide"><div className="panel-head"><div><small>MEDIA SOURCE ADAPTER</small><h2>Tìm và import World</h2></div><span className="status-pill">ONLINE</span></div>
             <form className="import-form" onSubmit={submit}><select value={source} onChange={(event) => setSource(event.target.value)}><option>AniList</option><option>IGDB</option></select><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Nhập tên anime hoặc game..." required /><button>Tìm kiếm</button></form>
             {notice && <div className="admin-notice">{notice} Backend sẽ cache kết quả và không sao chép binary asset.</div>}
-            <div className="import-results">{(adminResults.length ? adminResults : worlds.slice(0, 3).map((world) => ({ source: world.source, sourceId: world.id, title: world.title, coverImageUrl: world.cover, releaseYear: world.year, genres: world.genres }))).map((world) => <div key={`${world.source}-${world.sourceId}`}><RemoteMediaImage src={world.coverImageUrl} alt={world.title} /><p><small>{world.source} · {world.releaseYear}</small><b>{world.title}</b><span>{world.genres.join(" · ")}</span></p><button onClick={() => void importWorld(world)}>Import</button></div>)}</div>
+            <div className="import-results">{(adminResults.length ? adminResults : worlds.slice(0, 3).map((world) => ({ source: world.source, sourceId: world.sourceId, title: world.title, coverImageUrl: world.cover, releaseYear: world.year, genres: world.genres }))).map((world) => <div key={`${world.source}-${world.sourceId}`}><RemoteMediaImage src={world.coverImageUrl} alt={world.title} /><p><small>{world.source} · {world.releaseYear}</small><b>{world.title}</b><span>{world.genres.join(" · ")}</span></p><button onClick={() => void importWorld(world)}>Import</button></div>)}</div>
           </section>
           <section className="admin-panel"><div className="panel-head"><div><small>SOURCE HEALTH</small><h2>Adapter status</h2></div></div>{[["AniList", "GraphQL · cached 20m"], ["IGDB", "Backend token · cached 20m"], ["R2 Media", "Signed playback URL"]].map(([name, meta]) => <p className="adapter-row" key={name}><i /><span><b>{name}</b><small>{meta}</small></span><em>Healthy</em></p>)}</section>
-        </div> : tab === "Media assets" ? <MediaManager /> : <AdminOverview />}
+        </div> : tab === "AnimeThemes" ? <AnimeThemesManager /> : tab === "Media assets" ? <MediaManager /> : <AdminOverview />}
       </div>
     </section>
   );
 }
 
 function AdminOverview() {
-  return <><div className="admin-stats">{[["06", "Published worlds", "+2 tháng này"], ["118", "Collectibles", "92 active"], ["1,284", "Game sessions", "98.4% valid"], ["04", "Open reports", "1 needs review"]].map(([value, label, meta]) => <div key={label}><small>{label}</small><strong>{value}</strong><span>{meta}</span></div>)}</div><div className="admin-grid"><section className="admin-panel wide"><div className="panel-head"><div><small>ACTIVITY</small><h2>Archive operations</h2></div></div>{["Daily set 28.07 đã publish", "Media asset #7F72 được approve", "Android Requiem đã import từ IGDB", "Report #R104 chuyển sang review"].map((item, index) => <p className="activity-row" key={item}><span>0{index + 1}</span><b>{item}</b><small>{index + 2}h trước</small></p>)}</section><section className="admin-panel"><div className="panel-head"><div><small>SAFETY</small><h2>Content health</h2></div></div><div className="health-score"><strong>96</strong><span>/100</span></div><p className="health-note">Tất cả active media đều có attribution. 4 asset đang chờ rà soát license.</p></section></div></>;
+  return <div className="admin-grid"><section className="admin-panel wide"><div className="panel-head"><div><small>PRODUCTION DATA</small><h2>Không dùng số liệu giả</h2></div></div><p className="health-note">Thống kê admin sẽ được hiển thị sau khi endpoint tổng hợp dữ liệu thật từ Supabase hoàn tất. Các số world, collectible, session, report và activity demo đã được gỡ.</p></section><section className="admin-panel"><div className="panel-head"><div><small>CONTENT SAFETY</small><h2>Media policy</h2></div></div>{["AnimeThemes: đúng anime + năm", "Remote media: needs_review", "Active challenge: asset approved", "Opening và ending tách category"].map((item) => <p className="check-row" key={item}>✓ <span>{item}</span></p>)}</section></div>;
+}
+
+function AnimeThemesManager() {
+  const [query, setQuery] = useState("");
+  const [worldId, setWorldId] = useState("world-aot");
+  const [duration, setDuration] = useState(30);
+  const [notice, setNotice] = useState("");
+  const [results, setResults] = useState<Array<{ animeSlug: string; animeName: string; year: number | null; themeId: number; themeType: "OP" | "ED"; sequence: number | null; songTitle: string; artists: string[] }>>([]);
+  const search = async (event: FormEvent) => {
+    event.preventDefault();
+    setNotice("Đang tìm opening/ending từ AnimeThemes...");
+    try {
+      const payload = await authApi<{ results: typeof results }>(`/api/admin/animethemes/search?q=${encodeURIComponent(query)}`);
+      setResults(payload.results);
+      setNotice(`Tìm thấy ${payload.results.length} theme.`);
+    } catch (caught) {
+      setNotice(caught instanceof Error ? caught.message : "Không thể tìm AnimeThemes.");
+    }
+  };
+  const importTheme = async (theme: (typeof results)[number]) => {
+    setNotice(`Đang xác minh ${theme.songTitle} với Archive World...`);
+    try {
+      await authApi("/api/admin/animethemes/import", {
+        method: "POST",
+        body: JSON.stringify({ worldId, animeSlug: theme.animeSlug, themeId: theme.themeId, previewDurationSeconds: duration }),
+      });
+      setNotice(`${theme.songTitle} đã được import, gắn đúng World và tạo challenge ${theme.themeType}.`);
+    } catch (caught) {
+      setNotice(caught instanceof Error ? caught.message : "Không thể import theme.");
+    }
+  };
+  return <div className="admin-grid"><section className="admin-panel wide"><div className="panel-head"><div><small>ANIMETHEMES JSON:API</small><h2>Opening / ending đúng anime</h2></div><span className="status-pill">ONLINE</span></div><form className="media-form" onSubmit={search}><label>Archive World<select value={worldId} onChange={(event) => setWorldId(event.target.value)}>{worlds.filter((world) => world.type === "anime").map((world) => <option key={world.id} value={world.id}>{world.title}</option>)}</select></label><label>Tên anime<input value={query} onChange={(event) => setQuery(event.target.value)} required placeholder="Ví dụ: Shingeki no Kyojin" /></label><label>Preview<select value={duration} onChange={(event) => setDuration(Number(event.target.value))}>{[5, 10, 15, 20, 30].map((value) => <option key={value} value={value}>{value} giây</option>)}</select></label><button className="button primary">Tìm opening / ending</button></form>{notice && <p className="admin-notice">{notice}</p>}<div className="import-results">{results.slice(0, 30).map((theme) => <div key={theme.themeId}><p><small>{theme.themeType}{theme.sequence ?? ""} · {theme.year}</small><b>{theme.songTitle}</b><span>{theme.animeName} · {theme.artists.join(", ")}</span></p><button onClick={() => void importTheme(theme)}>Import đúng World</button></div>)}</div></section><section className="admin-panel"><div className="panel-head"><div><small>VALIDATION</small><h2>Quy tắc mapping</h2></div></div>{["So khớp tên hoặc alternative title", "So khớp năm phát hành", "OP và ED lưu category riêng", "Stream video WebM gốc", "Không tách audio khỏi video", "Lưu theme/video ID và attribution"].map((item) => <p className="check-row" key={item}>✓ <span>{item}</span></p>)}</section></div>;
 }
 
 function MediaManager() {
@@ -372,10 +435,12 @@ function MediaManager() {
       await authApi("/api/admin/media-assets", {
         method: "POST",
         body: JSON.stringify({
+          worldId: form.get("worldId"),
           mediaType,
           sourceType: mediaType === "audio" ? "remote_audio" : "remote_video",
           sourceUrl: form.get("sourceUrl"),
           title: form.get("title"),
+          artist: form.get("artist"),
           mediaCategory: form.get("mediaCategory"),
           previewStartSeconds: Number(form.get("previewStartSeconds")),
           previewDurationSeconds: duration,
@@ -392,7 +457,7 @@ function MediaManager() {
       setNotice(caught instanceof Error ? caught.message : "Không thể lưu media.");
     }
   };
-  return <div className="admin-grid"><section className="admin-panel wide"><div className="panel-head"><div><small>LICENSED MEDIA</small><h2>Thêm remote audio / video</h2></div><span className="status-pill warning">DRAFT</span></div><form className="media-form" onSubmit={saveMedia}><label>Remote HTTPS URL<input name="sourceUrl" required type="url" placeholder="https://cdn.partner.example/media/..." /></label><label>Tiêu đề nội bộ<input name="title" required /></label><div><label>Media type<select name="mediaType"><option value="audio">Audio</option><option value="video">Video</option></select></label><label>Category<select name="mediaCategory"><option value="anime_opening">Anime opening</option><option value="game_soundtrack">Game soundtrack</option><option value="anime_scene">Anime scene</option><option value="other">Other</option></select></label></div><div><label>Preview start (giây)<input name="previewStartSeconds" type="number" min="0" defaultValue="12" /></label><label>Duration<select value={duration} onChange={(event) => setDuration(Number(event.target.value))}>{[5, 10, 15, 20, 30].map((value) => <option key={value} value={value}>{value} giây</option>)}</select></label></div><div className="timeline"><span style={{ left: "18%", width: `${duration * 2}%` }} /><small>Preview duration · {duration} giây</small></div><label>Attribution<textarea name="attributionText" required placeholder="Nguồn, tác giả, chủ sở hữu..." /></label><label>License type<input name="licenseType" required placeholder="licensed / royalty-free / public-domain" /></label><label>License note<textarea name="licenseNote" required placeholder="Mô tả quyền preview và full playback..." /></label><label>Official source URL<input name="officialSourceUrl" required type="url" /></label><label><input name="fullPlayback" type="checkbox" /> Cho phép full playback sau reveal</label>{notice && <p className="admin-notice">{notice}</p>}<div className="form-actions"><button className="button primary" type="submit">Lưu bản nháp</button></div></form></section><section className="admin-panel"><div className="panel-head"><div><small>CAPABILITY</small><h2>Playback rules</h2></div></div>{["Preview tối đa 30 giây", "Không autoplay có âm thanh", "Không tách audio khỏi video", "Full player chỉ sau reveal", "Official source fallback"].map((item) => <p className="check-row" key={item}>✓ <span>{item}</span></p>)}</section></div>;
+  return <div className="admin-grid"><section className="admin-panel wide"><div className="panel-head"><div><small>LICENSED MEDIA</small><h2>Thêm đúng opening / ending / soundtrack</h2></div><span className="status-pill warning">NEEDS REVIEW</span></div><form className="media-form" onSubmit={saveMedia}><label>Archive World<select name="worldId" required>{worlds.map((world) => <option key={world.id} value={world.id}>{world.title} · {world.source}</option>)}</select></label><label>Remote HTTPS URL<input name="sourceUrl" required type="url" placeholder="https://cdn.partner.example/media/..." /></label><label>Tên bài/đoạn media chính xác<input name="title" required placeholder="Tên opening, ending hoặc soundtrack" /></label><label>Artist / composer<input name="artist" required /></label><div><label>Media type<select name="mediaType"><option value="audio">Audio</option><option value="video">Video</option></select></label><label>Category<select name="mediaCategory"><option value="anime_opening">Anime opening</option><option value="anime_ending">Anime ending</option><option value="anime_insert_song">Anime insert song</option><option value="game_soundtrack">Game soundtrack</option><option value="game_boss_theme">Game boss theme</option><option value="anime_scene">Anime scene</option><option value="other">Other</option></select></label></div><div><label>Preview start (giây)<input name="previewStartSeconds" type="number" min="0" defaultValue="12" /></label><label>Duration<select value={duration} onChange={(event) => setDuration(Number(event.target.value))}>{[5, 10, 15, 20, 30].map((value) => <option key={value} value={value}>{value} giây</option>)}</select></label></div><div className="timeline"><span style={{ left: "18%", width: `${duration * 2}%` }} /><small>Preview duration · {duration} giây</small></div><label>Attribution<textarea name="attributionText" required placeholder="Nguồn, tác giả, chủ sở hữu..." /></label><label>License type<input name="licenseType" required placeholder="licensed / royalty-free / public-domain" /></label><label>License note<textarea name="licenseNote" required placeholder="Mô tả quyền preview và full playback..." /></label><label>Official source URL<input name="officialSourceUrl" required type="url" /></label><label><input name="fullPlayback" type="checkbox" /> Cho phép full playback sau reveal</label><p className="health-note">Asset chỉ được lưu ở trạng thái chờ duyệt. Database sẽ từ chối phát hành nếu media không cùng Archive World, sai category, thiếu license, attribution hoặc nguồn chính thức.</p>{notice && <p className="admin-notice">{notice}</p>}<div className="form-actions"><button className="button primary" type="submit">Lưu để kiểm duyệt</button></div></form></section><section className="admin-panel"><div className="panel-head"><div><small>CAPABILITY</small><h2>Playback rules</h2></div></div>{["Phải đúng anime/game đã chọn", "Opening và ending là category riêng", "Preview tối đa 30 giây", "Không tách audio khỏi video", "Chỉ phát sau khi approved"].map((item) => <p className="check-row" key={item}>✓ <span>{item}</span></p>)}</section></div>;
 }
 
 function LegalView({ report = false }: { report?: boolean }) {
