@@ -1,5 +1,5 @@
-import { PartyApp } from "./party-app";
+import { ArchiveApp } from "./components/archive-app";
 
 export default function HomePage() {
-  return <PartyApp view="home" />;
+  return <ArchiveApp view="home" />;
 }

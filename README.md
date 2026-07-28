@@ -1,132 +1,152 @@
-# Luki Party Games
+# AniGame Archive
 
-Luki là nền tảng minigame nhóm song ngữ Việt–Anh, có giao diện bàn chơi chung, thẻ đáp án úp/lật, tài khoản người chơi tùy chọn và một backend local dành cho admin + AI.
+**Guess. Restore. Collect.**
 
-Website: <https://hoangkim0312.github.io/Luki-Minigame/>
+AniGame Archive là website mini-game và collection dành cho anime/game. Người chơi giải challenge để nhận fragment, dùng fragment phục hồi collectible, hoàn thành album, giữ daily streak và tranh hạng. Backend là nguồn sự thật cho đáp án, điểm và reward.
 
-## Có gì trong MVP
+## MVP đã có
 
-- 5 game có thể tạo phòng: **Chung Tần Số**, **Ai Đã Nói?**, **Nghĩ Quanh Con Số**, **Điểm Giao Nhau** và **Ý Kiến Nóng**.
-- **Nghĩ Quanh Con Số** phát riêng cho mỗi người một số 0–99, không dùng AI và không giới hạn vòng; người chơi tự hỏi nhau, đoán, lật số đúng rồi phát bộ số mới.
-- **Điểm Giao Nhau** dành cho đúng 2 người: mỗi người nhận một từ, cùng gửi kín một liên tưởng và đánh dấu sẵn sàng; khi cả hai ready, bàn chơi đếm ngược 3 giây rồi mới lật đáp án. Nếu khác nhau, hai đáp án trở thành cặp từ mới cho tới khi hội tụ. So khớp bỏ qua viết hoa/thường, dấu tiếng Việt, dấu câu và khoảng trắng thừa.
-- Người chơi ngồi quanh cùng một board; trạng thái đã trả lời được hiển thị nhưng đáp án vẫn úp cho tới lúc host lật bài.
-- Khách vào phòng bằng tên + mã, không cần tài khoản.
-- Người chơi có thể đăng ký để lưu danh tính; admin đăng nhập bằng tài khoản do backend tạo.
-- Admin thêm/chỉnh game, bật/tắt xuất bản, sửa bộ câu hỏi VI/EN và tạo câu hỏi AI theo chủ đề.
-- Phòng được đồng bộ giữa nhiều thiết bị bằng Socket.IO; server quyết định room state, điểm số và thời điểm reveal.
-- Resume token cho phép refresh/rejoin; người mất kết nối có 30 giây trước khi bị rời lobby hoặc chuyển host.
-- Groq tạo câu hỏi dạng JSON có kiểm tra schema; khi Groq lỗi backend dùng bộ câu hỏi dự phòng.
+- Landing, Explore, Archive World, Play, Daily, Collection, Profile, Leaderboard và Admin dashboard responsive.
+- Engine dùng chung cho Hint Ladder, Cropped Memory, Character Trail, Asset Link, Wrong Information, Anime Opening Guess, Game Soundtrack Guess và Anime Video Guess.
+- Answer alias được chuẩn hóa chính xác: lowercase, bỏ dấu, dấu câu và khoảng trắng thừa; không fuzzy match rộng.
+- Session backend có hạn dùng, chặn submit/reward trùng và tính điểm theo số hint.
+- Fragment, collectible, collection progress và leaderboard dùng D1.
+- `RemoteMediaImage` tải ảnh trực tiếp từ URL nguồn, có skeleton, fallback, lazy-load, blur/crop và không lưu binary vào database.
+- AniList GraphQL và IGDB adapters chỉ chạy ở backend; kết quả search được cache ngắn hạn.
+- Audio/video player phát media nguyên gốc, preview 5–30 giây, giới hạn replay, khóa seek trước reveal, hỗ trợ visible/blurred/covered và không tách audio khỏi video.
+- Remote media, R2 upload/playback, temporary signed URL, attribution, license note, report/takedown và audit log.
 
-## Chạy frontend
+## Stack
+
+- Next.js 16, React 19, TypeScript strict, Tailwind CSS 4.
+- Cloudflare D1 + Drizzle ORM cho dữ liệu quan hệ.
+- Cloudflare R2 cho audio/video được cấp phép.
+- Sites/Vinext cho Cloudflare Worker runtime.
+- Zod cho input validation.
+- Sites/ChatGPT identity headers cho đăng nhập; authorization luôn được kiểm tra lại ở API.
+
+## Chạy local
 
 Yêu cầu Node.js `>=22.13.0`.
 
 ```bash
 npm install
+copy .env.example .env.local
 npm run dev
 ```
 
-Frontend mặc định ở `http://localhost:3000`.
-
-## Chạy backend local
-
-Sao chép `.env.example` thành `.env.local`, sau đó thay ít nhất:
-
-```dotenv
-SESSION_SECRET=mot-chuoi-ngau-nhien-dai
-ADMIN_EMAIL=admin@example.com
-ADMIN_PASSWORD=mat-khau-manh
-GROQ_API_KEY=
-GROQ_MODEL=openai/gpt-oss-20b
-```
-
-Không commit `.env.local` và không đưa API key vào biến `NEXT_PUBLIC_*`.
+Frontend mặc định chạy ở `http://localhost:3000`. Local Next preview có thể xem toàn bộ demo UI. Các thao tác D1/R2 cần chạy qua Sites/Vinext local runtime:
 
 ```bash
-npm run dev:server
+npm run db:seed
+npm run build:sites
 ```
 
-Backend REST + Socket.IO chạy ở `http://localhost:8787`. Lần chạy đầu sẽ tạo tài khoản admin và dữ liệu trong `.local-data/` (đã được gitignore).
+## Migration và seed
 
-## Dùng backend local với GitHub Pages
-
-Cách nhanh nhất — chạy một lệnh:
+Schema Drizzle nằm tại `db/schema.ts`.
 
 ```bash
-npm run dev:online
+npm run db:generate
+npm run db:seed
 ```
 
-Lệnh này tự khởi động backend, tạo Cloudflare Quick Tunnel hỗ trợ HTTPS/WSS, kiểm tra kết nối và in ra một **Share this link**. Gửi nguyên link đó cho người chơi. Tham số `?server=...` được frontend lưu trên thiết bị, vì vậy không cần sửa GitHub variable hoặc deploy lại mỗi lần tunnel đổi URL. Giữ terminal mở trong lúc chơi; nhấn `Ctrl+C` để tắt backend và tunnel.
+- `drizzle/0000_cuddly_vargas.sql`: 30 bảng, index, unique constraint và foreign key.
+- `drizzle/0001_demo_seed.sql`: 6 Archive World, collectible, challenge, daily set và user demo.
+- Khi schema thay đổi, tạo migration mới; không sửa migration đã áp dụng trên production.
 
-Nếu Cloudflare đã báo `Registered tunnel connection` nhưng kiểm tra public còn đang chờ DNS, lệnh vẫn in link thay vì tự tắt. Đợi vài giây rồi refresh link là đủ. Không nên commit URL Quick Tunnel vào Git: URL chỉ tồn tại trong phiên chạy hiện tại và commit tự động sẽ làm bẩn lịch sử mà vẫn không giữ tunnel sống.
-
-Máy cần có `cloudflared` trong `PATH`. Có thể chỉ định đường dẫn riêng qua biến `CLOUDFLARED_PATH`.
-
-### Tunnel cố định
-
-Trang GitHub Pages chạy HTTPS nên trình duyệt không thể gọi thẳng backend HTTP ở máy bạn. Cần:
-
-1. Mở một HTTPS tunnel trỏ tới `http://localhost:8787` (Cloudflare Tunnel, ngrok hoặc dịch vụ tương đương).
-2. Đặt `ALLOWED_ORIGINS=https://hoangkim0312.github.io` trong `.env.local`.
-3. Trong GitHub repo, vào **Settings → Secrets and variables → Actions → Variables**, tạo `NEXT_PUBLIC_API_URL` với URL HTTPS của tunnel.
-4. Chạy lại workflow **Deploy GitHub Pages**.
-
-Tunnel phải hỗ trợ WebSocket (`wss://`). Nếu backend/tunnel tắt, website vẫn tải nhưng tạo phòng, vào phòng, đăng nhập, quản trị và AI sẽ tạm không dùng được.
-
-## Kiểm tra và deploy
+## Kiểm tra
 
 ```bash
+npm run typecheck
 npm run lint
 npm test
+npm run build:sites
 ```
 
-Mỗi push lên `main` sẽ chạy `.github/workflows/deploy-pages.yml` và deploy thư mục static export. Vercel cũng có thể import trực tiếp repository; hãy đặt `NEXT_PUBLIC_API_URL` trong Project Environment Variables nếu dùng Vercel.
+## API chính
 
-## Trạng thái roadmap
+### Public/user
 
-Project đang ở **Phase 1 (gần hoàn tất)**: guest session, room, lobby, Socket.IO, ready/start và reconnect cơ bản đã hoạt động. PostgreSQL và Redis chưa được thêm nên room vẫn nằm trong RAM và mất khi backend restart.
+- `GET /api/worlds`
+- `GET /api/worlds/:slug`
+- `GET /api/daily`
+- `GET /api/leaderboard`
+- `POST /api/game-sessions`
+- `POST /api/game-sessions/:id/open-hint`
+- `POST /api/game-sessions/:id/submit-answer`
+- `POST /api/collectibles/:id/restore`
+- `POST /api/report-content`
+- `GET /api/media-storage/:key?token=...`
 
-Một phần Phase 2 và Phase 4 đã có sớm: tách public/private payload, server-authoritative reveal/score, AI provider Groq, schema validation và fallback. Timer engine, game-module interface hoàn chỉnh và ba bộ luật game riêng vẫn chưa hoàn tất.
+### Admin
 
-Xem [trạng thái phase](docs/PHASE_STATUS.md) và [tài liệu Socket.IO](docs/SOCKET_EVENTS.md).
+- `GET /api/media/search?source=anilist|igdb&q=...`
+- `POST /api/admin/worlds/import`
+- `POST /api/admin/media-assets`
+- `POST /api/admin/media-assets/upload-url`
+- `PUT /api/media-storage/:key?token=...`
 
-## Supabase production database
+Mọi admin endpoint yêu cầu identity hợp lệ và email nằm trong `ADMIN_EMAILS`.
 
-Schema hoàn chỉnh nằm tại `supabase/migrations/202607220001_initial_platform.sql`.
-Điền các biến môi trường rồi chạy migration bằng npm:
+## Media provider
 
-```dotenv
-SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
-SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@db.YOUR_PROJECT_REF.supabase.co:5432/postgres
-```
+MVP hỗ trợ:
 
-```bash
-npm run migrate
-```
+- `remote_audio`
+- `remote_video`
+- `uploaded_audio`
+- `uploaded_video`
 
-Runner chỉ áp dụng file SQL mới trong `supabase/migrations/`, theo đúng thứ tự tên file.
-Không chỉnh sửa migration đã chạy; hãy tạo file mới như
-`202607230001_add_user_achievements.sql`. Checksum và lịch sử được lưu trong
-`public.schema_migrations`.
+Kiến trúc `MediaProviderAdapter` tách validation, capability, playback config và attribution khỏi UI. Remote URL phải là HTTPS public; localhost, loopback, link-local và private IP bị chặn để giảm SSRF.
 
-`SUPABASE_SERVICE_ROLE_KEY` chỉ dành cho backend. Không đưa key này vào GitHub Pages hoặc
-biến bắt đầu bằng `NEXT_PUBLIC_*`. Khi env hợp lệ, backend tự động dùng:
+### Thêm remote audio/video
 
-- Supabase Auth cho đăng ký, đăng nhập, access token và refresh token.
-- `profiles` cho tên hiển thị, ngôn ngữ và quyền `player`/`admin`.
-- Các bảng Trivia đã chuẩn hóa để lưu quiz, câu hỏi và đáp án.
-- JSON local chỉ làm fallback khi Supabase chưa được cấu hình.
+Vào `/admin`, chọn **Media assets**, nhập URL, type, visual mode, preview start, duration 5/10/15/20/30 giây, attribution và license note. API lưu URL/metadata, không tải file về application server.
 
-Sau khi tài khoản admin đã đăng ký, cấp quyền bằng SQL:
+### Object storage và signed playback
 
-```sql
-update public.profiles
-set role = 'admin'
-where id = (select id from auth.users where email = 'admin@example.com');
-```
+1. Client xin upload ticket tại `POST /api/admin/media-assets/upload-url`.
+2. Backend tạo object key UUID và URL tạm 10 phút.
+3. Client stream file vào R2; application không ghi file xuống local disk.
+4. Playback URL dùng HMAC token có expiry và mode (`preview` hoặc `revealed`).
+5. Preview mặc định hết hạn sau 5–10 phút; reveal nên dùng 30–60 phút.
 
-Migration cũng tạo bảng phòng, người tham gia, chat, Trivia session, câu trả lời và lịch sử
-điểm. RLS chặn trình duyệt truy cập trực tiếp các bảng gameplay; Railway backend vẫn là
-nguồn dữ liệu có thẩm quyền cho realtime và tính điểm.
+Đặt `MEDIA_SIGNING_SECRET` bằng chuỗi ngẫu nhiên mạnh. Không dùng filename chứa đáp án.
+
+### Full playback
+
+- `canPlayFullAfterReveal=true`: gỡ blur/crop/overlay, mở controls và seek đầy đủ.
+- `false`: chỉ replay preview nếu được phép và mở `officialSourceUrl`.
+- Provider bắt buộc visible player không được che branding.
+
+## Database
+
+30 bảng gồm:
+
+`users`, `user_profiles`, `media_sources`, `media_worlds`, `media_aliases`, `collectibles`, `collectible_variants`, `collection_sets`, `collection_set_items`, `user_fragments`, `user_collectibles`, `media_assets`, `challenges`, `challenge_hints`, `challenge_answers`, `challenge_options`, `game_sessions`, `game_session_hints`, `daily_challenges`, `daily_challenge_items`, `daily_results`, `leaderboard_entries`, `badges`, `titles`, `achievements`, `user_achievements`, `media_asset_reports`, `media_playback_sessions`, `media_provider_configs`, `audit_logs`.
+
+Unique constraint bảo vệ user collectible, fragment balance, daily result, leaderboard period và reward khỏi trùng lặp.
+
+## Bản quyền và takedown
+
+- Không rip, download, chuyển video thành MP3 hoặc lấy riêng audio stream từ YouTube/Spotify.
+- Demo audio là nguồn royalty-free SoundHelix; demo video là CC0 từ MDN và không đại diện nội dung anime/game thật.
+- Media thật chỉ được publish sau khi có license note, attribution và approval.
+- Report tạo record tại `media_asset_reports`. Admin có thể disable asset ngay; challenge mới không được bắt đầu nhưng lịch sử điểm hợp lệ vẫn được giữ.
+
+## Giới hạn hiện tại
+
+- IGDB cần token server-side và token phải được làm mới theo quy trình Twitch/IGDB.
+- Cache nguồn ngoài hiện dùng cache process ngắn hạn; production lớn nên nối Upstash Redis.
+- Upload URL tạm được ký tại application edge và stream thẳng vào R2 binding; nếu cần upload rất lớn, nên thay adapter bằng presigned S3-compatible R2 URL trực tiếp.
+- Demo chưa có creator workflow, trading, marketplace, realtime multiplayer, fingerprinting hay automatic copyright detection.
+- Media player HTML5 phụ thuộc CORS/range support của nguồn. Official embed cần adapter riêng theo điều khoản provider.
+
+## Roadmap
+
+1. Upstash cache + distributed rate limit.
+2. Official embed adapters (Vimeo/Mux/Cloudflare Stream) theo capability.
+3. Creator review workflow và moderation queue.
+4. Achievement rules, collection cosmetics và profile editor hoàn chỉnh.
+5. Integration tests chạy trên D1/R2 preview environment.
