@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useAuth } from "../auth-provider";
 
 const nav = [
+  ["/room", "Phòng chơi"],
   ["/explore", "Khám phá"],
   ["/play", "Thử thách"],
   ["/daily", "Daily"],

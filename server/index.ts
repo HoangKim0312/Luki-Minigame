@@ -6,6 +6,7 @@ import { isAcceptedAnswer } from "../lib/answer";
 import { mediaProviderAdapters } from "../lib/media-providers";
 import { sourceAdapters } from "../lib/source-adapters";
 import { animeThemesAdapter } from "../lib/animethemes-adapter";
+import { setupMultiplayer } from "./multiplayer";
 import {
   createSignedUploadUrl,
   createSupabaseAccount,
@@ -707,6 +708,8 @@ const server = createServer(async (req, res) => {
     else res.end();
   }
 });
+
+setupMultiplayer(server, allowedOrigins, { loadChallenge, challengeOptions });
 
 setInterval(() => {
   const now = Date.now();

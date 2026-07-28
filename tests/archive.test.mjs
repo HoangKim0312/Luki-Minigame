@@ -73,3 +73,19 @@ test("large AnimeThemes catalog and 30+20 media quiz flow are implemented", asyn
   assert.match(server, /previewDurationSeconds \+ 20/);
   assert.match(server, /title: challenge\.media\?\.title/);
 });
+
+test("multiplayer rooms are server-authoritative and support opening, ending and mixed matches", async () => {
+  const multiplayer = await readFile(new URL("../server/multiplayer.ts", import.meta.url), "utf8");
+  const roomUi = await readFile(new URL("../app/components/multiplayer-room.tsx", import.meta.url), "utf8");
+  const migration = await readFile(new URL("../supabase/migrations/202607280005_multiplayer_rooms.sql", import.meta.url), "utf8");
+  assert.match(multiplayer, /z\.enum\(\["opening", "ending", "mixed"\]\)/);
+  assert.match(multiplayer, /room:start/);
+  assert.match(multiplayer, /round:answer/);
+  assert.match(multiplayer, /isAcceptedAnswer/);
+  assert.match(multiplayer, /previewDurationSeconds \* 1_000/);
+  assert.match(multiplayer, /20_000/);
+  assert.match(roomUi, /Chỉ Opening/);
+  assert.match(roomUi, /Chỉ Ending/);
+  assert.match(roomUi, /Opening \+ Ending/);
+  assert.match(migration, /unique \(room_id, round_number, user_id\)/);
+});
