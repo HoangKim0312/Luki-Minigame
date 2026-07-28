@@ -11,6 +11,7 @@ type Props = {
   maxReplays: number;
   revealed: boolean;
   fullPlaybackAllowed: boolean;
+  autoPlay?: boolean;
   onPreviewEnded?: () => void;
   onStarted?: () => void;
 };
@@ -24,6 +25,7 @@ export function GuessMediaPlayer({
   maxReplays,
   revealed,
   fullPlaybackAllowed,
+  autoPlay = false,
   onPreviewEnded,
   onStarted,
 }: Props) {
@@ -33,6 +35,7 @@ export function GuessMediaPlayer({
   const [replays, setReplays] = useState(0);
   const [remaining, setRemaining] = useState(previewDurationSeconds);
   const [error, setError] = useState(false);
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const previewEnd = previewStartSeconds + previewDurationSeconds;
 
   const stopPreview = useCallback(() => {
@@ -72,6 +75,24 @@ export function GuessMediaPlayer({
     }
   }, [fullPlaybackAllowed, previewStartSeconds, revealed]);
 
+  useEffect(() => {
+    if (!autoPlay || revealed) return;
+    const player = playerRef.current;
+    if (!player) return;
+    const startAutomatically = () => {
+      player.currentTime = previewStartSeconds;
+      void player.play().then(() => {
+        setStarted(true);
+        setPlaying(true);
+        setAutoplayBlocked(false);
+        onStarted?.();
+      }).catch(() => setAutoplayBlocked(true));
+    };
+    if (player.readyState >= 1) queueMicrotask(startAutomatically);
+    else player.addEventListener("loadedmetadata", startAutomatically, { once: true });
+    return () => player.removeEventListener("loadedmetadata", startAutomatically);
+  }, [autoPlay, onStarted, previewStartSeconds, revealed]);
+
   const play = async () => {
     const player = playerRef.current;
     if (!player) return;
@@ -87,6 +108,7 @@ export function GuessMediaPlayer({
     }
     try {
       await player.play();
+      setAutoplayBlocked(false);
       if (!started) onStarted?.();
       setStarted(true);
       setPlaying(true);
@@ -125,6 +147,13 @@ export function GuessMediaPlayer({
         )}
         {!revealed && mediaType === "video" && visualMode === "covered" && (
           <div className="visual-cover" aria-hidden="true"><span>VISUAL LOCKED</span><i>Đang phát video gốc kèm âm thanh</i></div>
+        )}
+        {!revealed && autoplayBlocked && (
+          <button className="autoplay-fallback" type="button" onClick={play}>
+            <span>▶</span>
+            <b>Chạm để bật âm thanh</b>
+            <small>Trình duyệt đang chặn autoplay</small>
+          </button>
         )}
       </div>
       {!revealed && (

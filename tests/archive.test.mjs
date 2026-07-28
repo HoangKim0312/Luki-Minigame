@@ -88,8 +88,13 @@ test("multiplayer rooms are server-authoritative and support opening, ending and
   assert.match(multiplayer, /round:next/);
   assert.match(multiplayer, /round:skip-vote/);
   assert.match(multiplayer, /Math\.ceil\(eligibleVoters \* 0\.5\)/);
+  assert.match(multiplayer, /answer_locked/);
+  assert.match(multiplayer, /round:all-answered/);
+  assert.match(multiplayer, /Date\.now\(\) \+ 3_000/);
   assert.match(roomUi, /Chỉ Opening/);
   assert.match(roomUi, /Chỉ Ending/);
   assert.match(roomUi, /Opening \+ Ending/);
+  assert.match(roomUi, /autoPlay/);
+  assert.match(roomUi, /answer-countdown/);
   assert.match(migration, /unique \(room_id, round_number, user_id\)/);
 });

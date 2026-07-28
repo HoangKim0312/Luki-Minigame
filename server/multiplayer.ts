@@ -46,7 +46,7 @@ type Player = {
 };
 
 type RoomMode = "opening" | "ending" | "mixed";
-type RoomPhase = "lobby" | "guess" | "reveal" | "finished";
+type RoomPhase = "lobby" | "guess" | "answer_locked" | "reveal" | "finished";
 type Room = {
   id: string;
   code: string;
@@ -103,8 +103,8 @@ function publicRoom(room: Room) {
     phaseEndsAt: room.phaseEndsAt ?? null,
     skipVotes: room.skipVoters.size,
     skipVotesRequired: Math.max(1, Math.ceil(eligibleVoters * 0.5)),
-    players: [...room.players.values()].map(({ id, name, ready, score, correct, connected }) => ({
-      id, name, ready, score, correct, connected,
+    players: [...room.players.values()].map(({ id, name, ready, score, correct, connected, answeredAt }) => ({
+      id, name, ready, score, correct, connected, answered: Boolean(answeredAt),
     })),
   };
 }
@@ -194,7 +194,7 @@ export function setupMultiplayer(
     const challenge = room.currentChallenge;
     if (!challenge?.media || room.phase === "lobby" || room.phase === "finished") return;
     const previewDurationSeconds = Math.min(30, challenge.media.previewDurationSeconds);
-    if (room.phase === "guess") {
+    if (room.phase === "guess" || room.phase === "answer_locked") {
       io.to(socketId).emit("round:preview", {
         round: room.currentRound,
         totalRounds: room.rounds,
@@ -214,6 +214,9 @@ export function setupMultiplayer(
         options: await dependencies.challengeOptions(challenge),
         guessEndsAt: room.phaseEndsAt,
       });
+      if (room.phase === "answer_locked") {
+        io.to(socketId).emit("round:all-answered", { revealAt: room.phaseEndsAt });
+      }
     } else if (room.phase === "reveal") {
       io.to(socketId).emit("round:result", {
         round: room.currentRound,
@@ -266,7 +269,7 @@ export function setupMultiplayer(
 
   async function revealRound(room: Room) {
     const challenge = room.currentChallenge;
-    if (room.phase !== "guess" || !challenge?.media) return;
+    if ((room.phase !== "guess" && room.phase !== "answer_locked") || !challenge?.media) return;
     clearRoomTimers(room);
     room.phase = "reveal";
     room.phaseEndsAt = undefined;
@@ -298,6 +301,16 @@ export function setupMultiplayer(
       status: "revealed",
       ended_at: new Date().toISOString(),
     });
+  }
+
+  function scheduleAllAnsweredReveal(room: Room) {
+    if (room.phase !== "guess") return;
+    clearRoomTimers(room);
+    room.phase = "answer_locked";
+    room.phaseEndsAt = Date.now() + 3_000;
+    io.to(room.code).emit("round:all-answered", { revealAt: room.phaseEndsAt });
+    emitRoom(room);
+    room.timers.push(setTimeout(() => void revealRound(room), 3_000));
   }
 
   async function startRound(room: Room) {
@@ -472,7 +485,7 @@ export function setupMultiplayer(
       reply?.({ ok: true, locked: true });
       socket.emit("round:answer-locked", { answer: parsed.data.answer });
       if ([...room.players.values()].filter((entry) => entry.connected).every((entry) => entry.answeredAt)) {
-        await revealRound(room);
+        scheduleAllAnsweredReveal(room);
       }
     });
 

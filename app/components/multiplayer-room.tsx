@@ -8,14 +8,14 @@ import { useAuth } from "../auth-provider";
 import { GuessMediaPlayer } from "./guess-media-player";
 
 type RoomMode = "opening" | "ending" | "mixed";
-type RoomPlayer = { id: string; name: string; ready: boolean; score: number; correct: number; connected: boolean };
+type RoomPlayer = { id: string; name: string; ready: boolean; score: number; correct: number; connected: boolean; answered: boolean };
 type RoomState = {
   code: string;
   hostId: string;
   mode: RoomMode;
   rounds: number;
   maxPlayers: number;
-  phase: "lobby" | "guess" | "reveal" | "finished";
+  phase: "lobby" | "guess" | "answer_locked" | "reveal" | "finished";
   currentRound: number;
   phaseEndsAt: number | null;
   skipVotes: number;
@@ -123,6 +123,10 @@ export function MultiplayerRoom() {
     socket.on("round:answer-locked", () => {
       setAnswerLocked(true);
       setNotice("Đã khóa đáp án. Đang chờ người chơi còn lại.");
+    });
+    socket.on("round:all-answered", () => {
+      setAnswerLocked(true);
+      setNotice("Tất cả đã chốt đáp án — reveal sau 3 giây.");
     });
     socket.on("round:result", (value: Reveal) => {
       setReveal(value);
@@ -294,18 +298,9 @@ export function MultiplayerRoom() {
           <main>
             <div className="round-heading">
               <div><span>ROUND</span><strong>{String(room.currentRound).padStart(2, "0")}<i>/{String(room.rounds).padStart(2, "0")}</i></strong></div>
-              <p>{room.phase === "guess" ? "NGHE VÀ CHỌN ANIME" : room.phase === "reveal" ? "KẾT QUẢ" : "HOÀN THÀNH"}</p>
+              <p>{room.phase === "guess" ? "NGHE VÀ CHỌN ANIME" : room.phase === "answer_locked" ? "ĐANG KHÓA ĐÁP ÁN" : room.phase === "reveal" ? "KẾT QUẢ" : "HOÀN THÀNH"}</p>
               {room.phase !== "finished" && <div className="round-timer">{timer}<small>SEC</small></div>}
             </div>
-            {room.phase === "guess" && (
-              <div className="multiplayer-options">
-                {options.map((option, index) => (
-                  <button className={selected === option ? "selected" : ""} disabled={answerLocked} type="button" key={option} onClick={() => submitAnswer(option)}>
-                    <span>{String.fromCharCode(65 + index)}</span>{option}
-                  </button>
-                ))}
-              </div>
-            )}
             {preview && (
               <GuessMediaPlayer
                 key={`${preview.round}-${reveal ? "reveal" : "guess"}`}
@@ -313,7 +308,28 @@ export function MultiplayerRoom() {
                 playbackUrl={reveal?.reveal.fullPlaybackUrl || preview.media.playbackUrl}
                 revealed={Boolean(reveal)}
                 fullPlaybackAllowed={Boolean(reveal?.reveal.fullPlaybackAllowed)}
+                autoPlay
               />
+            )}
+            {(room.phase === "guess" || room.phase === "answer_locked") && (
+              <>
+                {room.phase === "answer_locked" && (
+                  <div className="answer-countdown">
+                    <span>SYNC COMPLETE</span>
+                    <strong>{timer}</strong>
+                    <p>Chuẩn bị reveal kết quả</p>
+                  </div>
+                )}
+                <div className="multiplayer-options">
+                  {options.map((option, index) => (
+                    <button className={selected === option ? "selected" : ""} disabled={answerLocked || room.phase === "answer_locked"} type="button" key={option} onClick={() => submitAnswer(option)}>
+                      <span>{String.fromCharCode(65 + index)}</span>
+                      <b>{option}</b>
+                      <i>{selected === option ? "ĐÃ CHỐT" : "CHỌN"}</i>
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
             {reveal && room.phase === "reveal" && (
               <div className="multiplayer-reveal">
@@ -344,7 +360,7 @@ export function MultiplayerRoom() {
             {sortedPlayers.map((player, index) => (
               <div className={player.id === session.user.id ? "is-me" : ""} key={player.id}>
                 <span>#{index + 1}</span><i>{player.name.slice(0, 2).toUpperCase()}</i>
-                <p><b>{player.name}</b><small>{player.correct} câu đúng</small></p>
+                <p><b>{player.name}</b><small>{room.phase === "guess" || room.phase === "answer_locked" ? player.answered ? "Đã trả lời" : "Đang nghe…" : `${player.correct} câu đúng`}</small></p>
                 <strong>{player.score}</strong>
               </div>
             ))}
