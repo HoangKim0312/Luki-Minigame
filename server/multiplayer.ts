@@ -46,7 +46,7 @@ type Player = {
 };
 
 type RoomMode = "opening" | "ending" | "mixed";
-type RoomPhase = "lobby" | "preview" | "guess" | "reveal" | "finished";
+type RoomPhase = "lobby" | "guess" | "reveal" | "finished";
 type Room = {
   id: string;
   code: string;
@@ -59,7 +59,10 @@ type Room = {
   players: Map<string, Player>;
   challengeIds: string[];
   currentChallenge?: MultiplayerChallenge;
+  roundStartedAt?: number;
   phaseEndsAt?: number;
+  skipVoters: Set<string>;
+  advancing: boolean;
   timers: NodeJS.Timeout[];
   createdAt: number;
 };
@@ -88,6 +91,7 @@ function roomCode() {
 }
 
 function publicRoom(room: Room) {
+  const eligibleVoters = [...room.players.values()].filter((player) => player.connected && player.id !== room.hostId).length;
   return {
     code: room.code,
     hostId: room.hostId,
@@ -97,6 +101,8 @@ function publicRoom(room: Room) {
     phase: room.phase,
     currentRound: room.currentRound,
     phaseEndsAt: room.phaseEndsAt ?? null,
+    skipVotes: room.skipVoters.size,
+    skipVotesRequired: Math.max(1, Math.ceil(eligibleVoters * 0.5)),
     players: [...room.players.values()].map(({ id, name, ready, score, correct, connected }) => ({
       id, name, ready, score, correct, connected,
     })),
@@ -188,12 +194,12 @@ export function setupMultiplayer(
     const challenge = room.currentChallenge;
     if (!challenge?.media || room.phase === "lobby" || room.phase === "finished") return;
     const previewDurationSeconds = Math.min(30, challenge.media.previewDurationSeconds);
-    if (room.phase === "preview") {
+    if (room.phase === "guess") {
       io.to(socketId).emit("round:preview", {
         round: room.currentRound,
         totalRounds: room.rounds,
-        serverStartedAt: (room.phaseEndsAt ?? Date.now()) - previewDurationSeconds * 1_000,
-        previewEndsAt: room.phaseEndsAt,
+        serverStartedAt: room.roundStartedAt,
+        previewEndsAt: (room.roundStartedAt ?? Date.now()) + previewDurationSeconds * 1_000,
         media: {
           playbackUrl: challenge.media.playbackUrl,
           mediaType: challenge.media.mediaType,
@@ -203,7 +209,6 @@ export function setupMultiplayer(
           maxReplays: 0,
         },
       });
-    } else if (room.phase === "guess") {
       io.to(socketId).emit("round:guess", {
         round: room.currentRound,
         options: await dependencies.challengeOptions(challenge),
@@ -224,7 +229,7 @@ export function setupMultiplayer(
           attribution: challenge.media.attribution,
         },
         ranking: ranking(room),
-        nextRoundAt: room.phaseEndsAt,
+        nextRoundAt: null,
       });
     }
   }
@@ -247,12 +252,25 @@ export function setupMultiplayer(
     });
   }
 
+  async function advanceAfterReveal(room: Room) {
+    if (room.phase !== "reveal" || room.advancing) return false;
+    room.advancing = true;
+    try {
+      if (room.currentRound >= room.rounds) await finishMatch(room);
+      else await startRound(room);
+      return true;
+    } finally {
+      room.advancing = false;
+    }
+  }
+
   async function revealRound(room: Room) {
     const challenge = room.currentChallenge;
     if (room.phase !== "guess" || !challenge?.media) return;
     clearRoomTimers(room);
     room.phase = "reveal";
-    room.phaseEndsAt = Date.now() + 8_000;
+    room.phaseEndsAt = undefined;
+    room.skipVoters.clear();
     const media = challenge.media;
     io.to(room.code).emit("round:result", {
       round: room.currentRound,
@@ -268,7 +286,7 @@ export function setupMultiplayer(
         attribution: media.attribution,
       },
       ranking: ranking(room),
-      nextRoundAt: room.phaseEndsAt,
+      nextRoundAt: null,
     });
     emitRoom(room);
     await persist("multiplayer_rounds?on_conflict=room_id,round_number", {
@@ -280,25 +298,6 @@ export function setupMultiplayer(
       status: "revealed",
       ended_at: new Date().toISOString(),
     });
-    room.timers.push(setTimeout(() => {
-      if (room.currentRound >= room.rounds) void finishMatch(room);
-      else void startRound(room);
-    }, 8_000));
-  }
-
-  async function startGuess(room: Room) {
-    if (room.phase !== "preview" || !room.currentChallenge) return;
-    clearRoomTimers(room);
-    room.phase = "guess";
-    room.phaseEndsAt = Date.now() + 20_000;
-    const options = await dependencies.challengeOptions(room.currentChallenge);
-    io.to(room.code).emit("round:guess", {
-      round: room.currentRound,
-      options,
-      guessEndsAt: room.phaseEndsAt,
-    });
-    emitRoom(room);
-    room.timers.push(setTimeout(() => void revealRound(room), 20_000));
   }
 
   async function startRound(room: Room) {
@@ -308,18 +307,21 @@ export function setupMultiplayer(
     if (!challenge?.media) return finishMatch(room);
     room.currentRound += 1;
     room.currentChallenge = challenge;
-    room.phase = "preview";
+    room.phase = "guess";
+    room.skipVoters.clear();
     room.players.forEach((player) => {
       player.answer = undefined;
       player.answeredAt = undefined;
     });
     const previewDurationSeconds = Math.min(30, challenge.media.previewDurationSeconds);
-    room.phaseEndsAt = Date.now() + previewDurationSeconds * 1_000;
+    const options = await dependencies.challengeOptions(challenge);
+    room.roundStartedAt = Date.now();
+    room.phaseEndsAt = room.roundStartedAt + (previewDurationSeconds + 20) * 1_000;
     io.to(room.code).emit("round:preview", {
       round: room.currentRound,
       totalRounds: room.rounds,
-      serverStartedAt: Date.now(),
-      previewEndsAt: room.phaseEndsAt,
+      serverStartedAt: room.roundStartedAt,
+      previewEndsAt: room.roundStartedAt + previewDurationSeconds * 1_000,
       media: {
         playbackUrl: challenge.media.playbackUrl,
         mediaType: challenge.media.mediaType,
@@ -329,8 +331,13 @@ export function setupMultiplayer(
         maxReplays: 0,
       },
     });
+    io.to(room.code).emit("round:guess", {
+      round: room.currentRound,
+      options,
+      guessEndsAt: room.phaseEndsAt,
+    });
     emitRoom(room);
-    room.timers.push(setTimeout(() => void startGuess(room), previewDurationSeconds * 1_000));
+    room.timers.push(setTimeout(() => void revealRound(room), (previewDurationSeconds + 20) * 1_000));
   }
 
   io.on("connection", (socket) => {
@@ -356,6 +363,8 @@ export function setupMultiplayer(
           currentRound: 0,
           players: new Map(),
           challengeIds: [],
+          skipVoters: new Set(),
+          advancing: false,
           timers: [],
           createdAt: Date.now(),
         };
@@ -449,9 +458,8 @@ export function setupMultiplayer(
       if (!parsed.success) return reply?.({ ok: false, error: "Đáp án không hợp lệ." });
       const answeredAt = Date.now();
       const correct = isAcceptedAnswer(parsed.data.answer, [room.currentChallenge.answer, ...room.currentChallenge.aliases]);
-      const guessStartedAt = (room.phaseEndsAt ?? answeredAt) - 20_000;
-      const elapsedSeconds = Math.max(0, (answeredAt - guessStartedAt) / 1_000);
-      const points = correct ? Math.max(500, Math.round(1_000 - elapsedSeconds * 25)) : 0;
+      const elapsedSeconds = Math.max(0, (answeredAt - (room.roundStartedAt ?? answeredAt)) / 1_000);
+      const points = correct ? Math.max(100, Math.round(1_000 - elapsedSeconds * 18)) : 0;
       player.answer = parsed.data.answer;
       player.answeredAt = answeredAt;
       player.score += points;
@@ -465,6 +473,31 @@ export function setupMultiplayer(
       socket.emit("round:answer-locked", { answer: parsed.data.answer });
       if ([...room.players.values()].filter((entry) => entry.connected).every((entry) => entry.answeredAt)) {
         await revealRound(room);
+      }
+    });
+
+    socket.on("round:next", async (_raw, reply) => {
+      const room = rooms.get(roomByPlayer.get(user.id) || "");
+      if (!room || room.phase !== "reveal") return reply?.({ ok: false, error: "Chưa thể qua câu tiếp theo." });
+      if (room.hostId !== user.id) return reply?.({ ok: false, error: "Chỉ chủ phòng có thể bấm Next." });
+      if (room.advancing) return reply?.({ ok: false, error: "Đang tải câu tiếp theo." });
+      reply?.({ ok: true });
+      await advanceAfterReveal(room);
+    });
+
+    socket.on("round:skip-vote", async (_raw, reply) => {
+      const room = rooms.get(roomByPlayer.get(user.id) || "");
+      const player = room?.players.get(user.id);
+      if (!room || !player || room.phase !== "reveal") return reply?.({ ok: false, error: "Chỉ vote sau khi reveal." });
+      if (room.hostId === user.id) return reply?.({ ok: false, error: "Host có thể bấm Next trực tiếp." });
+      if (room.skipVoters.has(user.id)) room.skipVoters.delete(user.id);
+      else room.skipVoters.add(user.id);
+      const eligibleVoters = [...room.players.values()].filter((entry) => entry.connected && entry.id !== room.hostId).length;
+      const required = Math.max(1, Math.ceil(eligibleVoters * 0.5));
+      emitRoom(room);
+      reply?.({ ok: true, voted: room.skipVoters.has(user.id), votes: room.skipVoters.size, required });
+      if (room.skipVoters.size >= required) {
+        await advanceAfterReveal(room);
       }
     });
 

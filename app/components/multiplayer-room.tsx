@@ -15,9 +15,11 @@ type RoomState = {
   mode: RoomMode;
   rounds: number;
   maxPlayers: number;
-  phase: "lobby" | "preview" | "guess" | "reveal" | "finished";
+  phase: "lobby" | "guess" | "reveal" | "finished";
   currentRound: number;
   phaseEndsAt: number | null;
+  skipVotes: number;
+  skipVotesRequired: number;
   players: RoomPlayer[];
 };
 type Preview = {
@@ -47,7 +49,7 @@ type Reveal = {
     attribution: string;
   };
   ranking: Ranking[];
-  nextRoundAt: number;
+  nextRoundAt: number | null;
 };
 type Reply = { ok: boolean; code?: string; error?: string };
 
@@ -74,6 +76,7 @@ export function MultiplayerRoom() {
   const [options, setOptions] = useState<string[]>([]);
   const [selected, setSelected] = useState("");
   const [answerLocked, setAnswerLocked] = useState(false);
+  const [votedSkip, setVotedSkip] = useState(false);
   const [reveal, setReveal] = useState<Reveal | null>(null);
   const [finalRanking, setFinalRanking] = useState<Ranking[] | null>(null);
   const [notice, setNotice] = useState("");
@@ -108,13 +111,14 @@ export function MultiplayerRoom() {
       setOptions([]);
       setSelected("");
       setAnswerLocked(false);
+      setVotedSkip(false);
       setReveal(null);
-      setNotice("Bấm phát ngay — đoạn nhạc dừng sau tối đa 30 giây.");
+      setNotice("Bốn đáp án đã mở. Đoán càng sớm, điểm càng cao.");
     });
     socket.on("round:guess", (value: { options: string[] }) => {
       setOptions(value.options);
       setReveal(null);
-      setNotice("Chọn một trong bốn anime trước khi hết 20 giây.");
+      setNotice("Chọn ngay khi nhận ra anime — clip dừng ở giây 30, còn thêm 20 giây để chốt.");
     });
     socket.on("round:answer-locked", () => {
       setAnswerLocked(true);
@@ -177,6 +181,19 @@ export function MultiplayerRoom() {
     socketRef.current?.emit("round:answer", { answer }, (reply: Reply) => {
       if (!reply.ok) setNotice(reply.error || "Không thể gửi đáp án.");
       else setAnswerLocked(true);
+    });
+  };
+
+  const advanceRound = () => {
+    socketRef.current?.emit("round:next", {}, (reply: Reply) => {
+      if (!reply.ok) setNotice(reply.error || "Không thể qua câu tiếp theo.");
+    });
+  };
+
+  const voteSkip = () => {
+    socketRef.current?.emit("round:skip-vote", {}, (reply: Reply & { voted?: boolean }) => {
+      if (!reply.ok) setNotice(reply.error || "Không thể vote.");
+      else setVotedSkip(Boolean(reply.voted));
     });
   };
 
@@ -277,17 +294,9 @@ export function MultiplayerRoom() {
           <main>
             <div className="round-heading">
               <div><span>ROUND</span><strong>{String(room.currentRound).padStart(2, "0")}<i>/{String(room.rounds).padStart(2, "0")}</i></strong></div>
-              <p>{room.phase === "preview" ? "ĐANG PHÁT CLIP" : room.phase === "guess" ? "CHỌN ANIME" : room.phase === "reveal" ? "KẾT QUẢ" : "HOÀN THÀNH"}</p>
+              <p>{room.phase === "guess" ? "NGHE VÀ CHỌN ANIME" : room.phase === "reveal" ? "KẾT QUẢ" : "HOÀN THÀNH"}</p>
               {room.phase !== "finished" && <div className="round-timer">{timer}<small>SEC</small></div>}
             </div>
-            {preview && (
-              <GuessMediaPlayer
-                key={`${preview.round}-${reveal ? "reveal" : "guess"}`}
-                {...preview.media}
-                revealed={Boolean(reveal)}
-                fullPlaybackAllowed={Boolean(reveal?.reveal.fullPlaybackAllowed)}
-              />
-            )}
             {room.phase === "guess" && (
               <div className="multiplayer-options">
                 {options.map((option, index) => (
@@ -297,6 +306,15 @@ export function MultiplayerRoom() {
                 ))}
               </div>
             )}
+            {preview && (
+              <GuessMediaPlayer
+                key={`${preview.round}-${reveal ? "reveal" : "guess"}`}
+                {...preview.media}
+                playbackUrl={reveal?.reveal.fullPlaybackUrl || preview.media.playbackUrl}
+                revealed={Boolean(reveal)}
+                fullPlaybackAllowed={Boolean(reveal?.reveal.fullPlaybackAllowed)}
+              />
+            )}
             {reveal && room.phase === "reveal" && (
               <div className="multiplayer-reveal">
                 <p className="kicker">ARCHIVE RESTORED</p>
@@ -304,6 +322,17 @@ export function MultiplayerRoom() {
                 <p><b>{reveal.reveal.title}</b>{reveal.reveal.artist ? ` — ${reveal.reveal.artist}` : ""}</p>
                 <small>{reveal.reveal.attribution}</small>
                 <a href={reveal.reveal.officialSourceUrl} target="_blank" rel="noreferrer">Mở nguồn chính thức ↗</a>
+                <div className="reveal-actions">
+                  {room.hostId === session.user.id ? (
+                    <button className="button primary" type="button" onClick={advanceRound}>
+                      {room.currentRound >= room.rounds ? "Xem kết quả trận" : "Câu tiếp theo"}
+                    </button>
+                  ) : (
+                    <button className={`button ${votedSkip ? "secondary" : "primary"}`} type="button" onClick={voteSkip}>
+                      {votedSkip ? "Hủy vote" : "Vote qua câu"} · {room.skipVotes}/{room.skipVotesRequired}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
             {room.phase === "finished" && ranking && <FinalBoard ranking={ranking} />}

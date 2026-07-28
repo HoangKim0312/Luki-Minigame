@@ -65,6 +65,11 @@ export function GuessMediaPlayer({
     player.pause();
     player.currentTime = fullPlaybackAllowed ? 0 : previewStartSeconds;
     setPlaying(false);
+    if (fullPlaybackAllowed) {
+      void player.play().then(() => setPlaying(true)).catch(() => {
+        // Trình duyệt có thể chặn autoplay có âm thanh; native controls vẫn cho phép phát thủ công.
+      });
+    }
   }, [fullPlaybackAllowed, previewStartSeconds, revealed]);
 
   const play = async () => {

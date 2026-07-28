@@ -83,7 +83,11 @@ test("multiplayer rooms are server-authoritative and support opening, ending and
   assert.match(multiplayer, /round:answer/);
   assert.match(multiplayer, /isAcceptedAnswer/);
   assert.match(multiplayer, /previewDurationSeconds \* 1_000/);
-  assert.match(multiplayer, /20_000/);
+  assert.match(multiplayer, /previewDurationSeconds \+ 20/);
+  assert.match(multiplayer, /1_000 - elapsedSeconds \* 18/);
+  assert.match(multiplayer, /round:next/);
+  assert.match(multiplayer, /round:skip-vote/);
+  assert.match(multiplayer, /Math\.ceil\(eligibleVoters \* 0\.5\)/);
   assert.match(roomUi, /Chỉ Opening/);
   assert.match(roomUi, /Chỉ Ending/);
   assert.match(roomUi, /Opening \+ Ending/);
