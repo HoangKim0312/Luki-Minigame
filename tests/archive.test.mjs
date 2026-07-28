@@ -56,3 +56,20 @@ test("production demo never substitutes unrelated audio or video for an anime th
   assert.match(cleanup, /validate_media_challenge_activation/);
   assert.match(cleanup, /approval_status <> 'approved'/);
 });
+
+test("large AnimeThemes catalog and 30+20 media quiz flow are implemented", async () => {
+  const sync = await readFile(new URL("../scripts/sync-animethemes-catalog.mjs", import.meta.url), "utf8");
+  const quiz = await readFile(new URL("../app/components/media-challenge-view.tsx", import.meta.url), "utf8");
+  const server = await readFile(new URL("../server/index.ts", import.meta.url), "utf8");
+  assert.match(sync, /SYNC_ANIME_LIMIT \|\| 300/);
+  assert.match(sync, /page\[size\].*"100"/s);
+  assert.doesNotMatch(sync, /writeFile|createWriteStream|fs\./i);
+  assert.match(quiz, /slice\(0, 4\)/);
+  assert.match(quiz, /multiple_choice/);
+  assert.match(quiz, /autocomplete/);
+  assert.match(quiz, /guessRemaining, setGuessRemaining\] = useState\(20\)/);
+  assert.match(quiz, /catalog\/suggest/);
+  assert.match(server, /media-start/);
+  assert.match(server, /previewDurationSeconds \+ 20/);
+  assert.match(server, /title: challenge\.media\?\.title/);
+});

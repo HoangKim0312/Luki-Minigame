@@ -1,7 +1,7 @@
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { challenges } from "../lib/archive-data";
+import { challenges, worlds } from "../lib/archive-data";
 import { isAcceptedAnswer } from "../lib/answer";
 import { mediaProviderAdapters } from "../lib/media-providers";
 import { sourceAdapters } from "../lib/source-adapters";
@@ -27,7 +27,7 @@ type Identity = { id: string; email: string; name: string; role: "admin" | "user
 type Json = Record<string, unknown> | unknown[];
 type WorldRow = {
   id: string;
-  source: "anilist" | "igdb";
+  source: "anilist" | "igdb" | "animethemes";
   source_id: string;
   type: "anime" | "game";
   title: string;
@@ -60,6 +60,139 @@ function publicWorld(row: WorldRow, collectibleCount = 0) {
     collectibleCount,
     restoredCount: 0,
   };
+}
+
+type RuntimeMedia = {
+  id: string;
+  playbackUrl: string;
+  mediaType: "audio" | "video";
+  previewStartSeconds: number;
+  previewDurationSeconds: number;
+  visualMode: "visible" | "blurred" | "covered" | "audio_player";
+  maxReplays: number;
+  fullPlaybackAllowed: boolean;
+  title: string;
+  artist: string | null;
+  animeName: string | null;
+  gameName: string | null;
+  officialSourceUrl: string;
+  attribution: string;
+};
+
+type RuntimeChallenge = {
+  id: string;
+  worldId: string;
+  worldType: "anime" | "game";
+  mode: string;
+  prompt: string;
+  answer: string;
+  aliases: string[];
+  hints: string[];
+  options?: string[];
+  timeLimitSeconds: number;
+  media?: RuntimeMedia;
+};
+
+function shuffle<T>(items: T[]) {
+  const copy = [...items];
+  for (let index = copy.length - 1; index > 0; index -= 1) {
+    const target = Math.floor(Math.random() * (index + 1));
+    [copy[index], copy[target]] = [copy[target], copy[index]];
+  }
+  return copy;
+}
+
+async function loadChallenge(challengeId: string): Promise<RuntimeChallenge | null> {
+  if (isSupabaseConfigured()) {
+    const rows = await supabaseRest<Array<{ id: string; world_id: string; media_asset_id: string | null; game_mode: string; prompt: string; correct_answer: string; visual_mode: RuntimeMedia["visualMode"] | null; max_replays: number; time_limit_seconds: number }>>(
+      `challenges?id=eq.${encodeURIComponent(challengeId)}&status=eq.active&select=id,world_id,media_asset_id,game_mode,prompt,correct_answer,visual_mode,max_replays,time_limit_seconds&limit=1`,
+    );
+    const row = rows[0];
+    if (row) {
+      const [worldRows, answerRows, hintRows] = await Promise.all([
+        supabaseRest<Array<{ type: "anime" | "game" }>>(`media_worlds?id=eq.${encodeURIComponent(row.world_id)}&select=type&limit=1`),
+        supabaseRest<Array<{ answer: string }>>(`challenge_answers?challenge_id=eq.${encodeURIComponent(row.id)}&select=answer`),
+        supabaseRest<Array<{ content: string }>>(`challenge_hints?challenge_id=eq.${encodeURIComponent(row.id)}&select=content&order=position.asc`),
+      ]);
+      let media: RuntimeMedia | undefined;
+      if (row.media_asset_id) {
+        const mediaRows = await supabaseRest<Array<{ id: string; playback_url: string; media_type: "audio" | "video"; preview_start_seconds: number; preview_duration_seconds: number; can_play_full_after_reveal: boolean; title: string; artist: string | null; anime_name: string | null; game_name: string | null; official_source_url: string; attribution_text: string }>>(
+          `media_assets?id=eq.${encodeURIComponent(row.media_asset_id)}&status=eq.active&approval_status=eq.approved&select=id,playback_url,media_type,preview_start_seconds,preview_duration_seconds,can_play_full_after_reveal,title,artist,anime_name,game_name,official_source_url,attribution_text&limit=1`,
+        );
+        const asset = mediaRows[0];
+        if (asset?.playback_url) {
+          media = {
+            id: asset.id,
+            playbackUrl: asset.playback_url,
+            mediaType: asset.media_type,
+            previewStartSeconds: asset.preview_start_seconds,
+            previewDurationSeconds: Math.min(30, asset.preview_duration_seconds),
+            visualMode: row.visual_mode ?? (asset.media_type === "audio" ? "audio_player" : "visible"),
+            maxReplays: row.max_replays,
+            fullPlaybackAllowed: asset.can_play_full_after_reveal,
+            title: asset.title,
+            artist: asset.artist,
+            animeName: asset.anime_name,
+            gameName: asset.game_name,
+            officialSourceUrl: asset.official_source_url,
+            attribution: asset.attribution_text,
+          };
+        }
+      }
+      return {
+        id: row.id,
+        worldId: row.world_id,
+        worldType: worldRows[0]?.type ?? "anime",
+        mode: row.game_mode,
+        prompt: row.prompt,
+        answer: row.correct_answer,
+        aliases: answerRows.map((item) => item.answer).filter((answer) => answer !== row.correct_answer),
+        hints: hintRows.map((item) => item.content),
+        timeLimitSeconds: row.time_limit_seconds,
+        media,
+      };
+    }
+  }
+  const local = challenges.find((item) => item.id === challengeId);
+  if (!local) return null;
+  const world = worlds.find((item) => item.id === local.worldId);
+  return {
+    id: local.id,
+    worldId: local.worldId,
+    worldType: world?.type ?? "anime",
+    mode: local.mode,
+    prompt: local.prompt,
+    answer: local.answer,
+    aliases: local.aliases,
+    hints: local.hints,
+    options: local.options,
+    timeLimitSeconds: 45,
+    media: local.media ? {
+      id: local.id,
+      playbackUrl: local.media.url,
+      mediaType: local.media.type,
+      previewStartSeconds: local.media.start,
+      previewDurationSeconds: Math.min(30, local.media.duration),
+      visualMode: local.media.visualMode,
+      maxReplays: local.media.maxReplays,
+      fullPlaybackAllowed: local.media.fullPlaybackAllowed,
+      title: "",
+      artist: null,
+      animeName: world?.type === "anime" ? world.title : null,
+      gameName: world?.type === "game" ? world.title : null,
+      officialSourceUrl: local.media.officialSourceUrl,
+      attribution: local.media.attribution,
+    } : undefined,
+  };
+}
+
+async function challengeOptions(challenge: RuntimeChallenge) {
+  if (challenge.options?.length) return shuffle(challenge.options);
+  const candidates = await supabaseRest<Array<{ title: string }>>(
+    `media_worlds?type=eq.${challenge.worldType}&status=eq.published&select=title&limit=120`,
+  );
+  const wrong = shuffle([...new Set(candidates.map((item) => item.title).filter((title) => title !== challenge.answer))]).slice(0, 3);
+  return shuffle([challenge.answer, ...wrong]);
 }
 
 function cors(req: IncomingMessage, res: ServerResponse) {
@@ -223,17 +356,88 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     const entries = await supabaseRest<Array<{ username: string; archive_score: number; streak: number }>>("profiles?select=username,archive_score,streak&order=archive_score.desc&limit=50");
     return json(res, 200, { entries: entries.map((entry, index) => ({ rank: index + 1, name: entry.username, score: entry.archive_score, streak: entry.streak })) });
   }
+  if (pathname === "/api/challenges" && req.method === "GET") {
+    const mode = url.searchParams.get("mode");
+    const modeFilter = mode ? `&game_mode=eq.${encodeURIComponent(mode)}` : "";
+    const rows = await supabaseRest<Array<{ id: string; world_id: string; game_mode: string; prompt: string; media_asset_id: string | null }>>(
+      `challenges?status=eq.active${modeFilter}&select=id,world_id,game_mode,prompt,media_asset_id&order=created_at.desc&limit=500`,
+    );
+    return json(res, 200, {
+      challenges: rows.map((item) => ({
+        id: item.id,
+        mode: item.game_mode,
+        prompt: item.prompt,
+        hasMedia: Boolean(item.media_asset_id),
+      })),
+    });
+  }
+  if (pathname === "/api/catalog/suggest" && req.method === "GET") {
+    const query = z.string().trim().min(2).max(80).parse(url.searchParams.get("q"));
+    const type = z.enum(["anime", "game"]).optional().parse(url.searchParams.get("type") || undefined);
+    const safe = query.replace(/[%*,()]/g, "");
+    const typeFilter = type ? `&type=eq.${type}` : "";
+    const rows = await supabaseRest<Array<{ id: string; title: string; alternative_titles: string[]; type: "anime" | "game"; cover_image_url: string | null }>>(
+      `media_worlds?status=eq.published${typeFilter}&title=ilike.*${encodeURIComponent(safe)}*&select=id,title,alternative_titles,type,cover_image_url&order=title.asc&limit=8`,
+    );
+    return json(res, 200, { suggestions: rows.map((item) => ({ id: item.id, title: item.title, alternativeTitles: item.alternative_titles, type: item.type, cover: item.cover_image_url })) });
+  }
   if (pathname === "/api/game-sessions" && req.method === "POST") {
     if (!rateLimit(req, res, "session-start", 30, 60_000)) return;
     const user = await requireUser(req, res);
     if (!user) return;
     const input = z.object({ challengeId: z.string().min(1) }).parse(await body(req));
-    const challenge = challenges.find((item) => item.id === input.challengeId);
+    const challenge = await loadChallenge(input.challengeId);
     if (!challenge) return error(res, 404, "Challenge không tồn tại.", "CHALLENGE_NOT_FOUND");
     const id = randomUUID();
-    const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
+    if (challenge.media && !challenge.media.playbackUrl) return error(res, 409, "Media hiện không khả dụng.", "MEDIA_UNAVAILABLE");
+    const guessSeconds = challenge.media ? 20 : challenge.timeLimitSeconds;
+    const expiresAt = new Date(Date.now() + (challenge.media ? 5 * 60_000 : (guessSeconds + 5) * 1000)).toISOString();
+    const options = await challengeOptions(challenge);
     await supabaseRest("game_sessions", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ id, user_id: user.id, challenge_id: challenge.id, status: "active", expires_at: expiresAt }) });
-    return json(res, 201, { sessionId: id, challengeType: challenge.mode, prompt: challenge.prompt, options: challenge.options, media: challenge.media ? { playbackUrl: challenge.media.url, mediaType: challenge.media.type, previewStartSeconds: challenge.media.start, previewDurationSeconds: Math.min(30, challenge.media.duration), visualMode: challenge.media.visualMode, maxReplays: challenge.media.maxReplays } : undefined, timeLimitSeconds: 45, expiresAt });
+    if (challenge.media) {
+      await supabaseRest("media_playback_sessions", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ game_session_id: id, media_asset_id: challenge.media.id }) });
+    }
+    return json(res, 201, {
+      sessionId: id,
+      challengeId: challenge.id,
+      challengeType: challenge.mode,
+      prompt: challenge.prompt,
+      options,
+      media: challenge.media ? {
+        playbackUrl: challenge.media.playbackUrl,
+        mediaType: challenge.media.mediaType,
+        previewStartSeconds: challenge.media.previewStartSeconds,
+        previewDurationSeconds: challenge.media.previewDurationSeconds,
+        visualMode: challenge.media.visualMode,
+        maxReplays: challenge.media.maxReplays,
+      } : undefined,
+      previewDurationSeconds: challenge.media?.previewDurationSeconds ?? 0,
+      guessDurationSeconds: guessSeconds,
+      expiresAt,
+    });
+  }
+
+  const mediaStartMatch = pathname.match(/^\/api\/game-sessions\/([^/]+)\/media-start$/);
+  if (mediaStartMatch && req.method === "POST") {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const rows = await supabaseRest<Array<{ id: string; challenge_id: string; status: string; expires_at: string }>>(`game_sessions?id=eq.${encodeURIComponent(mediaStartMatch[1])}&user_id=eq.${user.id}&select=id,challenge_id,status,expires_at&limit=1`);
+    const session = rows[0];
+    if (!session || session.status !== "active") return error(res, 404, "Session không tồn tại hoặc đã kết thúc.", "SESSION_NOT_FOUND");
+    const playbackRows = await supabaseRest<Array<{ id: string; media_started_at: string | null }>>(`media_playback_sessions?game_session_id=eq.${encodeURIComponent(session.id)}&select=id,media_started_at&limit=1`);
+    const playback = playbackRows[0];
+    if (!playback) return error(res, 409, "Session không có media.", "MEDIA_SESSION_NOT_FOUND");
+    const challenge = await loadChallenge(session.challenge_id);
+    if (!challenge?.media) return error(res, 409, "Media không khả dụng.", "MEDIA_UNAVAILABLE");
+    const startedAt = playback.media_started_at ?? new Date().toISOString();
+    const expiresAt = new Date(Date.parse(startedAt) + (challenge.media.previewDurationSeconds + 20 + 5) * 1000).toISOString();
+    if (!playback.media_started_at) {
+      await Promise.all([
+        supabaseRest(`media_playback_sessions?id=eq.${playback.id}&media_started_at=is.null`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ media_started_at: startedAt }) }),
+        supabaseRest(`game_sessions?id=eq.${session.id}&status=eq.active`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ expires_at: expiresAt }) }),
+      ]);
+    }
+    return json(res, 200, { mediaStartedAt: startedAt, previewEndsAt: new Date(Date.parse(startedAt) + challenge.media.previewDurationSeconds * 1000).toISOString(), guessEndsAt: new Date(Date.parse(startedAt) + (challenge.media.previewDurationSeconds + 20) * 1000).toISOString(), expiresAt });
   }
 
   const hintMatch = pathname.match(/^\/api\/game-sessions\/([^/]+)\/open-hint$/);
@@ -245,7 +449,7 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     const session = rows[0];
     if (!session) return error(res, 404, "Session không tồn tại.", "SESSION_NOT_FOUND");
     if (session.status !== "active" || Date.parse(session.expires_at) < Date.now()) return error(res, 409, "Challenge đã hết hạn.", "CHALLENGE_EXPIRED");
-    const challenge = challenges.find((item) => item.id === session.challenge_id);
+    const challenge = await loadChallenge(session.challenge_id);
     if (!challenge || session.hint_count >= challenge.hints.length) return error(res, 409, "Không còn hint.", "NO_MORE_HINTS");
     await supabaseRest(`game_sessions?id=eq.${session.id}&status=eq.active`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ hint_count: session.hint_count + 1 }) });
     return json(res, 200, { hint: { position: session.hint_count + 1, content: challenge.hints[session.hint_count] }, scoreAfterHint: [1000, 750, 500, 300, 100][Math.min(session.hint_count + 1, 4)] });
@@ -256,13 +460,13 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     if (!rateLimit(req, res, "submit-answer", 30, 60_000)) return;
     const user = await requireUser(req, res);
     if (!user) return;
-    const input = z.object({ answer: z.string().trim().min(1).max(160) }).parse(await body(req));
+    const input = z.object({ answer: z.string().trim().max(160) }).parse(await body(req));
     const rows = await supabaseRest<Array<{ id: string; challenge_id: string; hint_count: number; status: string; expires_at: string }>>(`game_sessions?id=eq.${encodeURIComponent(submitMatch[1])}&user_id=eq.${user.id}&select=id,challenge_id,hint_count,status,expires_at&limit=1`);
     const session = rows[0];
     if (!session) return error(res, 404, "Session không tồn tại.", "SESSION_NOT_FOUND");
     if (session.status !== "active") return error(res, 409, "Challenge đã hoàn thành.", "ALREADY_COMPLETED");
     if (Date.parse(session.expires_at) < Date.now()) return error(res, 409, "Challenge đã hết hạn.", "CHALLENGE_EXPIRED");
-    const challenge = challenges.find((item) => item.id === session.challenge_id);
+    const challenge = await loadChallenge(session.challenge_id);
     if (!challenge) return error(res, 404, "Challenge không tồn tại.", "CHALLENGE_NOT_FOUND");
     const correct = isAcceptedAnswer(input.answer, [challenge.answer, ...challenge.aliases]);
     const score = correct ? [1000, 750, 500, 300, 100][Math.min(session.hint_count, 4)] : 0;
@@ -271,7 +475,22 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
       method: "POST",
       body: JSON.stringify({ p_session_id: session.id, p_user_id: user.id, p_world_id: challenge.worldId, p_score: score, p_fragments: fragments, p_correct: correct }),
     });
-    return json(res, 200, { correct, score, reward: { fragments, worldId: challenge.worldId }, reveal: { correctAnswer: challenge.answer, fullPlaybackAllowed: challenge.media?.fullPlaybackAllowed ?? false, fullPlaybackUrl: challenge.media?.fullPlaybackAllowed ? challenge.media.url : null, officialSourceUrl: challenge.media?.officialSourceUrl ?? null, attribution: challenge.media?.attribution ?? null } });
+    return json(res, 200, {
+      correct,
+      score,
+      reward: { fragments, worldId: challenge.worldId },
+      reveal: {
+        correctAnswer: challenge.answer,
+        title: challenge.media?.title ?? null,
+        artist: challenge.media?.artist ?? null,
+        animeName: challenge.media?.animeName ?? null,
+        gameName: challenge.media?.gameName ?? null,
+        fullPlaybackAllowed: challenge.media?.fullPlaybackAllowed ?? false,
+        fullPlaybackUrl: challenge.media?.fullPlaybackAllowed ? challenge.media.playbackUrl : null,
+        officialSourceUrl: challenge.media?.officialSourceUrl ?? null,
+        attribution: challenge.media?.attribution ?? null,
+      },
+    });
   }
 
   const restoreMatch = pathname.match(/^\/api\/collectibles\/([^/]+)\/restore$/);

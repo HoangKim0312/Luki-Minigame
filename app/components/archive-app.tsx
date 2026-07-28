@@ -133,6 +133,12 @@ function PlayView() {
       <div className="page-intro split"><div><p className="kicker"><span /> Challenge terminal</p><h1>Chọn cách<br /><em>giải mã ký ức</em></h1></div><p>Tất cả game mode dùng chung engine session. Answer, timer, hint và reward được xác minh phía backend.</p></div>
       <div className="mode-grid">{modes.map((mode, index) => {
         const challenge = challenges.find((item) => item.mode === mode.id);
+        if (mode.id === "anime_opening_guess") {
+          return <Link href="/play/theme" className="mode-card" key={mode.id}>
+            <div className="mode-number">{mode.icon}</div><span className="mode-symbol">▶</span>
+            <h2>{mode.label}</h2><p>Challenge ngẫu nhiên từ catalog AnimeThemes. Trắc nghiệm 4 đáp án hoặc autocomplete.</p><footer><small>{mode.reward}</small><b>Chơi catalog live →</b></footer>
+          </Link>;
+        }
         if (!mode.available || !challenge) {
           return <article className="mode-card unavailable" key={mode.id}>
             <div className="mode-number">{mode.icon}</div><span className="mode-symbol">⌁</span>
@@ -379,7 +385,7 @@ function AdminView() {
           <section className="admin-panel wide"><div className="panel-head"><div><small>MEDIA SOURCE ADAPTER</small><h2>Tìm và import World</h2></div><span className="status-pill">ONLINE</span></div>
             <form className="import-form" onSubmit={submit}><select value={source} onChange={(event) => setSource(event.target.value)}><option>AniList</option><option>IGDB</option></select><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Nhập tên anime hoặc game..." required /><button>Tìm kiếm</button></form>
             {notice && <div className="admin-notice">{notice} Backend sẽ cache kết quả và không sao chép binary asset.</div>}
-            <div className="import-results">{(adminResults.length ? adminResults : worlds.slice(0, 3).map((world) => ({ source: world.source, sourceId: world.sourceId, title: world.title, coverImageUrl: world.cover, releaseYear: world.year, genres: world.genres }))).map((world) => <div key={`${world.source}-${world.sourceId}`}><RemoteMediaImage src={world.coverImageUrl} alt={world.title} /><p><small>{world.source} · {world.releaseYear}</small><b>{world.title}</b><span>{world.genres.join(" · ")}</span></p><button onClick={() => void importWorld(world)}>Import</button></div>)}</div>
+            <div className="import-results">{(adminResults.length ? adminResults : worlds.filter((world): world is typeof world & { source: "anilist" | "igdb" } => world.source !== "animethemes").slice(0, 3).map((world) => ({ source: world.source, sourceId: world.sourceId, title: world.title, coverImageUrl: world.cover, releaseYear: world.year, genres: world.genres }))).map((world) => <div key={`${world.source}-${world.sourceId}`}><RemoteMediaImage src={world.coverImageUrl} alt={world.title} /><p><small>{world.source} · {world.releaseYear}</small><b>{world.title}</b><span>{world.genres.join(" · ")}</span></p><button onClick={() => void importWorld(world)}>Import</button></div>)}</div>
           </section>
           <section className="admin-panel"><div className="panel-head"><div><small>SOURCE HEALTH</small><h2>Adapter status</h2></div></div>{[["AniList", "GraphQL · cached 20m"], ["IGDB", "Backend token · cached 20m"], ["R2 Media", "Signed playback URL"]].map(([name, meta]) => <p className="adapter-row" key={name}><i /><span><b>{name}</b><small>{meta}</small></span><em>Healthy</em></p>)}</section>
         </div> : tab === "AnimeThemes" ? <AnimeThemesManager /> : tab === "Media assets" ? <MediaManager /> : <AdminOverview />}

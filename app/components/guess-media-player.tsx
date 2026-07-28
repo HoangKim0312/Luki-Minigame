@@ -12,6 +12,7 @@ type Props = {
   revealed: boolean;
   fullPlaybackAllowed: boolean;
   onPreviewEnded?: () => void;
+  onStarted?: () => void;
 };
 
 export function GuessMediaPlayer({
@@ -24,6 +25,7 @@ export function GuessMediaPlayer({
   revealed,
   fullPlaybackAllowed,
   onPreviewEnded,
+  onStarted,
 }: Props) {
   const playerRef = useRef<HTMLMediaElement>(null);
   const [playing, setPlaying] = useState(false);
@@ -80,6 +82,7 @@ export function GuessMediaPlayer({
     }
     try {
       await player.play();
+      if (!started) onStarted?.();
       setStarted(true);
       setPlaying(true);
     } catch {
@@ -135,4 +138,3 @@ export function GuessMediaPlayer({
     </div>
   );
 }
-

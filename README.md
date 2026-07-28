@@ -156,6 +156,26 @@ Admin endpoints kiểm tra JWT Supabase và role từ PostgreSQL.
 - Opening/ending được ánh xạ qua AnimeThemes theo tên/alternative title và năm phát hành. Video WebM được stream nguyên bản từ URL do API trả về; không tách audio.
 - Admin dùng tab `AnimeThemes` để tìm OP/ED, chọn đúng Archive World và import.
 - Backend từ chối mapping sai anime/năm; database chỉ cho media challenge hoạt động khi asset cùng World, đúng category, đã approved và có attribution/official source.
+- Production catalog có thể đồng bộ theo batch mà không tải media:
+
+```bash
+SYNC_ANIME_LIMIT=300 npm run sync:animethemes
+```
+
+Script lấy tối đa 100 anime mỗi request theo rate limit của provider, lưu cover/video dưới dạng remote URL và tạo tối đa một OP cùng một ED cho mỗi anime.
+
+Luồng media quiz:
+
+```text
+Start challenge
+→ Hiển thị và phát video gốc tối đa 30 giây
+→ Dừng preview
+→ Mở 20 giây trả lời
+→ Trắc nghiệm gồm 4 đáp án đã xáo trộn
+  hoặc nhập tên anime với autocomplete từ catalog
+→ Backend chấm đáp án hoặc xử lý timeout
+→ Reveal anime, tên bài, artist, attribution và full video
+```
 - Nếu không được phép full playback, reveal chỉ mở official source.
 
 ## Kiểm tra

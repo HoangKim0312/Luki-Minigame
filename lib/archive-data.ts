@@ -14,7 +14,7 @@ export type World = {
   collectibleCount: number;
   restoredCount: number;
   description: string;
-  source: "anilist" | "igdb";
+  source: "anilist" | "igdb" | "animethemes";
 };
 
 export type ChallengeMode =
@@ -248,8 +248,8 @@ export const challenges: DemoChallenge[] = [
       url: "https://v.animethemes.moe/ShingekiNoKyojin-OP1.webm",
       start: 0,
       duration: 30,
-      visualMode: "covered",
-      maxReplays: 1,
+      visualMode: "visible",
+      maxReplays: 0,
       fullPlaybackAllowed: true,
       officialSourceUrl: "https://animethemes.moe/anime/shingeki_no_kyojin",
       attribution: "Guren no Yumiya · Linked Horizon · Attack on Titan OP1. Metadata và remote video từ AnimeThemes.moe.",
